@@ -104,7 +104,7 @@ if os.path.exists(json_path):
         let offsetX = 0;
         let offsetY = 0;
 
-        function resize() function resize() {
+        function resize() function resize() {{
     // 画面の解像度比率を取得（通常のPCなら1、高精細なスマホやMacなら2〜3）
     const dpr = window.devicePixelRatio || 1;
     
@@ -122,7 +122,7 @@ if os.path.exists(json_path):
     size = Math.min(window.innerWidth, window.innerHeight);
     offsetX = (window.innerWidth - size) / 2;
     offsetY = (window.innerHeight - size) / 2;
-}
+}}
         window.addEventListener('resize', resize);
         resize();
         
@@ -376,6 +376,7 @@ st.markdown("""
 - **Q5**: (内部計算用: リンクのつながりやすさ等)
 - **Q6_Gift**: (予備)
 """)
+
 
 
 
