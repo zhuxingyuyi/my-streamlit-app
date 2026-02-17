@@ -44,7 +44,7 @@ if os.path.exists(json_path):
         with open(bg_path, "rb") as f:
             bg_b64 = base64.b64encode(f.read()).decode('utf-8')
             
-    # JavaScript内の $ 記号を Python が誤解しないよう、{{ }} でエスケープしています
+    # Pythonのf-stringとJSのテンプレートリテラルが衝突しないよう注意して記述
     html_code = f"""
     <!DOCTYPE html>
     <html>
@@ -112,7 +112,7 @@ if os.path.exists(json_path):
                         ctx.beginPath();
                         ctx.moveTo(mapX(n1.x), mapY(n1.y));
                         ctx.lineTo(mapX(n2.x), mapY(n2.y));
-                        ctx.strokeStyle = `rgba(255, 247, 214, ${{alphaBase}})`;
+                        ctx.strokeStyle = "rgba(255, 247, 214, " + alphaBase + ")";
                         ctx.lineWidth = 1.0; ctx.stroke();
                     }}
                 }}
@@ -138,4 +138,25 @@ if os.path.exists(json_path):
                     
                     ctx.beginPath();
                     ctx.arc(x, y, 3, 0, Math.PI*2); 
-                    ctx.fillStyle = `rgba(255, 255, 255, ${{alpha * 0.9
+                    ctx.fillStyle = "rgba(255, 255, 255, " + (alpha * 0.9) + ")";
+                    ctx.fill();
+                    
+                    ctx.fillStyle = "rgba(255, 247, 214, " + (alpha * 0.9) + ")";
+                    ctx.font = 'bold 12px sans-serif';
+                    ctx.fillText(n.name, x + 8, y - 5);
+                }}
+            }});
+            if (frame < DURATION_FRAMES) requestAnimationFrame(loop);
+        }}
+    </script>
+    </body>
+    </html>
+    """
+    components.html(html_code, height=750, scrolling=False)
+else:
+    st.info("👈 サイドバーから「アニメーションを生成」ボタンを押してください。")
+
+st.divider()
+if os.path.exists("survey_data.csv"):
+    st.subheader("📊 データフォーマット")
+    st.dataframe(pd.read_csv("survey_data.csv"))
