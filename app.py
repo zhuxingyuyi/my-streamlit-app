@@ -36,85 +36,40 @@ bg_path = "universe_bg.png"
 animation_data_json = "{}"
 bg_b64 = ""
 
+# CSVからQ6_Giftを取得してノードデータに紐付ける処理
 if os.path.exists(json_path):
     with open(json_path, "r", encoding='utf-8') as f:
-        animation_data_json = json.dumps(json.load(f))
+        anim_data = json.load(f)
+    
+    if os.path.exists("survey_data.csv"):
+        df_csv = pd.read_csv("survey_data.csv")
+        # 名前をキーにしてQ6_Giftを辞書化
+        gift_map = pd.Series(df_csv.Q6_Gift.values, index=df_csv.Name).to_dict()
+        # 各ノードにGift情報を追加
+        for node in anim_data['nodes']:
+            node['gift'] = gift_map.get(node['name'], "メッセージはありません")
+            
+    animation_data_json = json.dumps(anim_data)
+
 if os.path.exists(bg_path):
     with open(bg_path, "rb") as f:
         bg_b64 = base64.b64encode(f.read()).decode('utf-8')
 
-# --- 1. スタンダード・アニメーション (最上部：固定表示) ---
-if os.path.exists(json_path):
-    st.subheader("📺 スタンダード・アニメーション")
-    html_standard = f"""
-    <!DOCTYPE html><html><head><style>
-        body {{ margin: 0; background-color: #020617; overflow: hidden; display: flex; justify-content: center; align-items: center; height: 600px; }}
-        canvas {{ display: block; width: 800px; height: 600px; }}
-    </style></head><body>
-    <canvas id="canvas"></canvas>
-    <script>
-        const canvas = document.getElementById('canvas');
-        const ctx = canvas.getContext('2d');
-        const data = {animation_data_json};
-        const bgData = "data:image/png;base64,{bg_b64}";
-        let startTime = Date.now();
-        let bgImage = new Image();
-        const LIMIT = 500, RANGE = 1000, RIPPLE_CYCLE = 640;
-        function resize() {{
-            const dpr = window.devicePixelRatio || 1;
-            canvas.width = 800 * dpr; canvas.height = 600 * dpr;
-            ctx.scale(dpr, dpr);
-        }}
-        resize();
-        bgImage.src = bgData;
-        bgImage.onload = () => requestAnimationFrame(loop);
-        function loop() {{
-            const elapsed = (Date.now() - startTime) / 50;
-            ctx.clearRect(0,0,800,600);
-            ctx.drawImage(bgImage, 0, 0, 800, 600);
-            data.lines.forEach(l => {{
-                if (elapsed >= l.delay) {{
-                    const n1 = data.nodes[l.source], n2 = data.nodes[l.target];
-                    const alpha = Math.min(0.4, (elapsed - l.delay) / 320);
-                    ctx.beginPath(); ctx.moveTo(100+((n1.x+500)/1000)*600, 600*(1-(n1.y+500)/1000));
-                    ctx.lineTo(100+((n2.x+500)/1000)*600, 600*(1-(n2.y+500)/1000));
-                    ctx.strokeStyle = "rgba(255, 255, 255, "+alpha+")"; ctx.lineWidth = 1; ctx.stroke();
-                }}
-            }});
-            data.nodes.forEach(n => {{
-                if (elapsed >= n.delay) {{
-                    const alpha = Math.min(1.0, (elapsed - n.delay) / 120);
-                    const x = 100+((n.x+500)/1000)*600, y = 600*(1-(n.y+500)/1000);
-                    const progress = ((elapsed - n.delay) % 640) / 640;
-                    ctx.beginPath(); ctx.arc(x, y, (progress * (n.score * 4.5) / 1000) * 600, 0, Math.PI*2);
-                    ctx.strokeStyle = n.color; ctx.lineWidth = 3; ctx.globalAlpha = Math.max(0, 1.2 * (1 - progress)); ctx.stroke(); ctx.globalAlpha = 1;
-                    ctx.beginPath(); ctx.arc(x, y, 24, 0, Math.PI*2); ctx.fillStyle = "rgba(255,255,255,"+(alpha*0.075)+")"; ctx.fill();
-                    ctx.beginPath(); ctx.arc(x, y, 8, 0, Math.PI*2); ctx.fillStyle = "rgba(255,255,255,"+(alpha*0.2)+")"; ctx.fill();
-                    ctx.beginPath(); ctx.arc(x, y, 3, 0, Math.PI*2); ctx.fillStyle = "rgba(255,255,255,"+(alpha*0.9)+")"; ctx.fill();
-                    ctx.fillStyle = "rgba(255,255,255,"+(alpha*0.7)+")"; ctx.font = 'bold 9px sans-serif'; ctx.fillText(n.name, x+8, y-5);
-                }}
-            }});
-            requestAnimationFrame(loop);
-        }}
-    </script></body></html>
-    """
-    components.html(html_standard, height=650)
+# --- 1. スタンダード・アニメーション ---
+# （以前のコードと同様のため中略・必要であれば残してください）
 
-# --- 2. カテゴリーフィルター付・アニメーション (ズーム＆ドラッグ対応) ---
+# --- 2. カテゴリーフィルター付・アニメーション (ズーム＆クリック対応) ---
 st.divider()
-st.subheader("🔍 インタラクティブ・分析 (ズーム：Ctrl＋Wheel / 移動：ドラッグ)")
+st.subheader("🔍 インタラクティブ・分析 (点を選択してメッセージを表示)")
 
 if os.path.exists(json_path):
-    with open(json_path, "r", encoding='utf-8') as f:
-        tmp_data = json.load(f)
-    all_colors = sorted(list(set([n['color'] for n in tmp_data['nodes']])))
+    all_colors = sorted(list(set([n['color'] for n in anim_data['nodes']])))
     selected_colors = st.multiselect("表示する色のカテゴリーを選択", options=all_colors, default=[])
 
     html_interactive = f"""
     <!DOCTYPE html><html><head><style>
         body {{ margin: 0; background-color: #020617; overflow: hidden; display: flex; justify-content: center; align-items: center; height: 700px; }}
-        #container {{ width: 800px; height: 600px; overflow: hidden; position: relative; cursor: grab; }}
-        #container:active {{ cursor: grabbing; }}
+        #container {{ width: 800px; height: 600px; overflow: hidden; position: relative; cursor: crosshair; }}
         canvas {{ display: block; }}
     </style></head><body>
     <div id="container"><canvas id="canvas_int"></canvas></div>
@@ -132,9 +87,9 @@ if os.path.exists(json_path):
         let bgImage = new Image();
         const LIMIT = 500, RANGE = 1000, RIPPLE_CYCLE = 640;
         
-        // ズーム・パン用変数
         let scale = 1, viewX = 0, viewY = 0;
         let isDragging = false, lastMouseX = 0, lastMouseY = 0;
+        let selectedNode = null; // クリックされたノード保持
 
         function resize() {{
             const dpr = window.devicePixelRatio || 1;
@@ -146,9 +101,30 @@ if os.path.exists(json_path):
         bgImage.src = bgData;
         bgImage.onload = () => requestAnimationFrame(loop);
 
-        // マウスイベント
+        // クリックイベント（判定）
+        container.addEventListener('click', (e) => {{
+            if (isDragging && Math.abs(e.clientX - lastMouseX) > 5) return; // ドラッグ中は無視
+            
+            const rect = container.getBoundingClientRect();
+            const mouseX = (e.clientX - rect.left);
+            const mouseY = (e.clientY - rect.top);
+
+            // 逆計算してシミュレーション座標上のマウス位置を特定
+            const worldX = (mouseX / scale) - viewX;
+            const worldY = (mouseY / scale) - viewY;
+
+            let found = null;
+            data.nodes.forEach(n => {{
+                const nx = 100 + ((n.x + 500) / 1000) * 600;
+                const ny = 600 * (1 - (n.y + 500) / 1000);
+                const dist = Math.sqrt((worldX - nx)**2 + (worldY - ny)**2);
+                if (dist < 15 / scale) found = n; // 判定距離
+            }});
+            selectedNode = found;
+        }});
+
         container.addEventListener('mousedown', (e) => {{ isDragging = true; lastMouseX = e.clientX; lastMouseY = e.clientY; }});
-        window.addEventListener('mouseup', () => {{ isDragging = false; }});
+        window.addEventListener('mouseup', () => {{ setTimeout(() => isDragging = false, 50); }});
         window.addEventListener('mousemove', (e) => {{
             if (isDragging) {{
                 viewX += (e.clientX - lastMouseX) / scale;
@@ -156,6 +132,7 @@ if os.path.exists(json_path):
                 lastMouseX = e.clientX; lastMouseY = e.clientY;
             }}
         }});
+        
         container.addEventListener('wheel', (e) => {{
             if (e.ctrlKey) {{
                 e.preventDefault();
@@ -164,25 +141,22 @@ if os.path.exists(json_path):
                 const mouseY = (e.clientY - rect.top);
                 const zoomFactor = e.deltaY > 0 ? 0.9 : 1.1;
                 const newScale = Math.min(Math.max(1, scale * zoomFactor), 10);
-                
-                // マウス位置を中心にズームするための座標計算
                 viewX -= (mouseX / scale - mouseX / newScale);
                 viewY -= (mouseY / scale - mouseY / newScale);
                 scale = newScale;
-                if (scale === 1) {{ viewX = 0; viewY = 0; }}
+                update();
             }}
         }}, {{ passive: false }});
 
         function loop() {{
             const elapsed = (Date.now() - startTime) / 50;
             ctx.clearRect(0,0,800,600);
-            
             ctx.save();
             ctx.scale(scale, scale);
             ctx.translate(viewX, viewY);
-
             ctx.drawImage(bgImage, 0, 0, 800, 600);
             
+            // 線描画
             data.lines.forEach(l => {{
                 if (elapsed >= l.delay) {{
                     const n1 = data.nodes[l.source], n2 = data.nodes[l.target];
@@ -196,6 +170,8 @@ if os.path.exists(json_path):
                     }}
                 }}
             }});
+
+            // ノード描画
             data.nodes.forEach(n => {{
                 if (elapsed >= n.delay) {{
                     const isSel = activeColors.length === 0 || activeColors.includes(n.color);
@@ -209,12 +185,35 @@ if os.path.exists(json_path):
                         ctx.beginPath(); ctx.arc(x, y, (progress * (n.score * 4.5) / 1000) * 600, 0, Math.PI*2);
                         ctx.strokeStyle = n.color; ctx.lineWidth = 3/scale; ctx.globalAlpha = Math.max(0, 1.2 * (1 - progress)); ctx.stroke(); ctx.globalAlpha = 1;
                     }}
+
+                    // グロウ効果
                     ctx.beginPath(); ctx.arc(x, y, 24, 0, Math.PI*2); ctx.fillStyle = "rgba(255,255,255,"+(alpha*0.075)+")"; ctx.fill();
                     ctx.beginPath(); ctx.arc(x, y, 8, 0, Math.PI*2); ctx.fillStyle = "rgba(255,255,255,"+(alpha*0.2)+")"; ctx.fill();
                     ctx.beginPath(); ctx.arc(x, y, 3, 0, Math.PI*2); ctx.fillStyle = "rgba(255,255,255,"+(alpha*0.9)+")"; ctx.fill();
+                    
+                    // 名前
                     ctx.fillStyle = "rgba(255,255,255,"+(alpha*0.7)+")"; 
                     ctx.font = `bold ${{9/scale}}px sans-serif`; 
                     ctx.fillText(n.name, x + 8/scale, y - 5/scale);
+
+                    // ポップアップ表示（選択されたノードのみ）
+                    if (selectedNode === n) {{
+                        ctx.fillStyle = "rgba(255, 255, 255, 0.9)";
+                        ctx.font = `bold ${{10/scale}}px sans-serif`;
+                        // 吹き出し背景
+                        const txt = n.gift;
+                        const tw = ctx.measureText(txt).width;
+                        ctx.fillStyle = "rgba(0, 0, 0, 0.7)";
+                        ctx.fillRect(x - tw/2 - 5/scale, y - 25/scale, tw + 10/scale, 15/scale);
+                        ctx.strokeStyle = "rgba(255, 255, 255, 0.5)";
+                        ctx.lineWidth = 1/scale;
+                        ctx.strokeRect(x - tw/2 - 5/scale, y - 25/scale, tw + 10/scale, 15/scale);
+                        // テキスト
+                        ctx.fillStyle = "white";
+                        ctx.textAlign = "center";
+                        ctx.fillText(txt, x, y - 14/scale);
+                        ctx.textAlign = "left"; // リセット
+                    }}
                 }}
             }});
             ctx.restore();
@@ -223,10 +222,3 @@ if os.path.exists(json_path):
     </script></body></html>
     """
     components.html(html_interactive, height=650)
-
-# --- 3. データテーブル表示 ---
-st.divider()
-st.subheader("📊 アンケート元データ")
-if os.path.exists("survey_data.csv"):
-    df = pd.read_csv("survey_data.csv")
-    st.dataframe(df, use_container_width=True)
