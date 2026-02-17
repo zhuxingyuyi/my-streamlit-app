@@ -128,3 +128,95 @@ if os.path.exists(json_path):
                     // --- 波紋の描画 (太さを3.0に変更) ---
                     if (progress < 1.0) {{
                         ctx.beginPath();
+                        ctx.arc(x, y, rPx, 0, Math.PI * 2);
+                        ctx.strokeStyle = n.color;
+                        ctx.lineWidth = 3.0; 
+                        ctx.globalAlpha = 1.0 - progress;
+                        ctx.stroke();
+                        ctx.globalAlpha = 1.0;
+                    }}
+
+                    // --- 二重の白円グロウ効果 (復活) ---
+                    // 外側の大きな薄い円
+                    ctx.beginPath();
+                    ctx.arc(x, y, (80/RANGE * size / 2), 0, Math.PI*2);
+                    ctx.fillStyle = "rgba(255, 255, 255, " + (alpha * 0.05) + ")";
+                    ctx.fill();
+                    
+                    // 内側の少し濃い円
+                    ctx.beginPath();
+                    ctx.arc(x, y, (40/RANGE * size / 2 * 0.7), 0, Math.PI*2);
+                    ctx.fillStyle = "rgba(255, 255, 255, " + (alpha * 0.15) + ")";
+                    ctx.fill();
+                    
+                    // --- 中心の点 ---
+                    ctx.beginPath();
+                    ctx.arc(x, y, 3, 0, Math.PI*2); 
+                    ctx.fillStyle = "rgba(255, 255, 255, " + (alpha * 0.9) + ")";
+                    ctx.fill();
+                    
+                    // --- 名前 (サイズを9pxに変更) ---
+                    ctx.fillStyle = "rgba(255, 255, 255, " + (alpha * 0.7) + ")";
+                    ctx.font = 'bold 9px sans-serif'; 
+                    ctx.fillText(n.name, x + 8, y - 5);
+                }}
+            }});
+            if (frame < DURATION_FRAMES) requestAnimationFrame(loop);
+        }}
+    </script>
+    </body>
+    </html>
+    """
+    components.html(html_code, height=750, scrolling=False)
+else:
+    st.info("👈 サイドバーから「アニメーションを生成」ボタンを押してください。")
+
+# --- メイン表示エリア：静止画 (Zoom機能) ---
+static_glow_path = "static_network_glow.png"
+if os.path.exists(static_glow_path):
+    st.subheader("静止画 (Motionless) - Zoomable")
+    with open(static_glow_path, "rb") as f:
+        img_data = base64.b64encode(f.read()).decode()
+    
+    html_static = f"""
+    <!DOCTYPE html>
+    <html>
+    <head>
+    <style>
+        body {{ margin: 0; overflow: hidden; background-color: #020617; display: flex; justify-content: center; align-items: center; height: 100vh; }}
+        #container {{ width: 100%; height: 100%; max-width: 750px; aspect-ratio: 1 / 1; overflow: hidden; position: relative; }}
+        img {{ transform-origin: 0 0; width: 100%; height: 100%; object-fit: contain; display: block; pointer-events: none; }}
+    </style>
+    </head>
+    <body>
+        <div id="container">
+            <img id="zoom-img" src="data:image/png;base64,{img_data}" />
+        </div>
+        <script>
+            const container = document.getElementById('container');
+            const img = document.getElementById('zoom-img');
+            let scale = 1, pointX = 0, pointY = 0;
+            function update() {{ img.style.transform = `translate(${{pointX}}px, ${{pointY}}px) scale(${{scale}})`; }}
+            container.addEventListener('wheel', (e) => {{
+                if (e.ctrlKey) {{
+                    e.preventDefault();
+                    const rect = container.getBoundingClientRect();
+                    const mx = e.clientX - rect.left, my = e.clientY - rect.top;
+                    const xs = (mx - pointX) / scale, ys = (my - pointY) / scale;
+                    const factor = e.deltaY > 0 ? 0.9 : 1.1;
+                    scale = Math.min(Math.max(1, scale * factor), 20);
+                    pointX = mx - xs * scale; pointY = my - ys * scale;
+                    if (scale === 1) {{ pointX = 0; pointY = 0; }}
+                    update();
+                }}
+            }}, {{ passive: false }});
+        </script>
+    </body>
+    </html>
+    """
+    components.html(html_static, height=750)
+
+st.divider()
+if os.path.exists("survey_data.csv"):
+    st.subheader("📊 データフォーマット")
+    st.dataframe(pd.read_csv("survey_data.csv"))
