@@ -30,7 +30,7 @@ if st.sidebar.button("🎥 アニメーションを生成/更新"):
         except Exception as e:
             st.error(f"実行エラー: {e}")
 
-# --- メイン表示エリア ---
+# --- メイン表示エリア：アニメーション ---
 json_path = "animation_data.json"
 bg_path = "universe_bg.png"
 
@@ -44,7 +44,6 @@ if os.path.exists(json_path):
         with open(bg_path, "rb") as f:
             bg_b64 = base64.b64encode(f.read()).decode('utf-8')
             
-    # Pythonのf-stringとJSのテンプレートリテラルが衝突しないよう注意して記述
     html_code = f"""
     <!DOCTYPE html>
     <html>
@@ -112,7 +111,7 @@ if os.path.exists(json_path):
                         ctx.beginPath();
                         ctx.moveTo(mapX(n1.x), mapY(n1.y));
                         ctx.lineTo(mapX(n2.x), mapY(n2.y));
-                        ctx.strokeStyle = "rgba(255, 247, 214, " + alphaBase + ")";
+                        ctx.strokeStyle = "rgba(255, 255, 255, " + alphaBase + ")";
                         ctx.lineWidth = 1.0; ctx.stroke();
                     }}
                 }}
@@ -141,9 +140,10 @@ if os.path.exists(json_path):
                     ctx.fillStyle = "rgba(255, 255, 255, " + (alpha * 0.9) + ")";
                     ctx.fill();
                     
-                    ctx.fillStyle = "rgba(255, 247, 214, " + (alpha * 0.9) + ")";
-                    ctx.font = 'bold 12px sans-serif';
-                    ctx.fillText(n.name, x + 8, y - 5);
+                    // フォント色を白 (255, 255, 255) に変更し、アルファ値を少し下げて透明感を演出
+                    ctx.fillStyle = "rgba(255, 255, 255, " + (alpha * 0.7) + ")";
+                    ctx.font = 'bold 6px sans-serif'; 
+                    ctx.fillText(n.name, x + 5, y - 3);
                 }}
             }});
             if (frame < DURATION_FRAMES) requestAnimationFrame(loop);
@@ -155,6 +155,51 @@ if os.path.exists(json_path):
     components.html(html_code, height=750, scrolling=False)
 else:
     st.info("👈 サイドバーから「アニメーションを生成」ボタンを押してください。")
+
+# --- メイン表示エリア：静止画 (Zoom機能) ---
+static_glow_path = "static_network_glow.png"
+if os.path.exists(static_glow_path):
+    st.subheader("静止画 (Motionless) - Zoomable")
+    with open(static_glow_path, "rb") as f:
+        img_data = base64.b64encode(f.read()).decode()
+    
+    html_static = f"""
+    <!DOCTYPE html>
+    <html>
+    <head>
+    <style>
+        body {{ margin: 0; overflow: hidden; background-color: #020617; display: flex; justify-content: center; align-items: center; height: 100vh; }}
+        #container {{ width: 100%; height: 100%; max-width: 750px; aspect-ratio: 1 / 1; overflow: hidden; position: relative; }}
+        img {{ transform-origin: 0 0; width: 100%; height: 100%; object-fit: contain; display: block; pointer-events: none; }}
+    </style>
+    </head>
+    <body>
+        <div id="container">
+            <img id="zoom-img" src="data:image/png;base64,{img_data}" />
+        </div>
+        <script>
+            const container = document.getElementById('container');
+            const img = document.getElementById('zoom-img');
+            let scale = 1, pointX = 0, pointY = 0;
+            function update() {{ img.style.transform = `translate(${{pointX}}px, ${{pointY}}px) scale(${{scale}})`; }}
+            container.addEventListener('wheel', (e) => {{
+                if (e.ctrlKey) {{
+                    e.preventDefault();
+                    const rect = container.getBoundingClientRect();
+                    const mx = e.clientX - rect.left, my = e.clientY - rect.top;
+                    const xs = (mx - pointX) / scale, ys = (my - pointY) / scale;
+                    const factor = e.deltaY > 0 ? 0.9 : 1.1;
+                    scale = Math.min(Math.max(1, scale * factor), 20);
+                    pointX = mx - xs * scale; pointY = my - ys * scale;
+                    if (scale === 1) {{ pointX = 0; pointY = 0; }}
+                    update();
+                }}
+            }}, {{ passive: false }});
+        </script>
+    </body>
+    </html>
+    """
+    components.html(html_static, height=750)
 
 st.divider()
 if os.path.exists("survey_data.csv"):
