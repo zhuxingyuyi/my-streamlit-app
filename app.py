@@ -9,225 +9,203 @@ import base64
 st.set_page_config(page_title="ファイブエムOS 可視化プロト", layout="wide")
 
 # --- タイトルと説明 ---
-st.title(" ファイブエムOS 可視化プロト")
+st.title("🌌 ファイブエムOS 可視化プロト")
 st.write("アンケート結果を『共鳴のエコー』として可視化します。")
 
 # --- サイドバー：データ管理 ---
 st.sidebar.header("🛠 データ管理")
 
-selected_colors = []
-json_path = "animation_data.json"
+# 1. ファイルアップロード機能
+uploaded_file = st.sidebar.file_uploader("新しいデータをアップロード (CSV)", type="csv")
+if uploaded_file is not None:
+    with open("survey_data.csv", "wb") as f:
+        f.write(uploaded_file.getbuffer())
+    st.sidebar.success("データが保存されました！")
 
-if os.path.exists(json_path):
-    with open(json_path, "r", encoding='utf-8') as f:
-        tmp_data = json.load(f)
-    
-    # カテゴリー名（色）でのフィルター機能
-    all_colors = sorted(list(set([n['color'] for n in tmp_data['nodes']])))
-    st.sidebar.subheader(" カテゴリー表示")
-    selected_labels = st.sidebar.multiselect(
-        "表示するカテゴリーの色を選択（空だと全表示）",
-        options=all_colors,
-        default=[]
-    )
-    selected_colors = selected_labels
-
-st.sidebar.divider()
-
-if st.sidebar.button(" アニメーションを生成/更新"):
-    with st.spinner('更新中...'):
+# 2. アニメーション生成ボタン
+if st.sidebar.button("🎥 アニメーションを生成/更新"):
+    with st.spinner('データを解析してアニメーションを生成中...'):
         try:
             import gen_animation
-            st.success("完了！")
+            st.success("更新完了！")
             st.rerun() 
         except Exception as e:
-            st.error(f"エラー: {e}")
+            st.error(f"実行エラー: {e}")
 
-# --- メイン表示エリア：アニメーション ---
+# --- 共通変数の準備 ---
+json_path = "animation_data.json"
 bg_path = "universe_bg.png"
+animation_data_json = "{}"
+bg_b64 = ""
+
 if os.path.exists(json_path):
     with open(json_path, "r", encoding='utf-8') as f:
-        animation_data = json.load(f)
+        animation_data_json = json.dumps(json.load(f))
+if os.path.exists(bg_path):
+    with open(bg_path, "rb") as f:
+        bg_b64 = base64.b64encode(f.read()).decode('utf-8')
+
+# --- 1. スタンダード・アニメーション (最上部：制御なし) ---
+if os.path.exists(json_path):
+    st.subheader("📺 スタンダード・アニメーション (初期再生型)")
     
-    bg_b64 = ""
-    if os.path.exists(bg_path):
-        with open(bg_path, "rb") as f:
-            bg_b64 = base64.b64encode(f.read()).decode('utf-8')
-            
-    html_code = f"""
-    <!DOCTYPE html>
-    <html>
-    <head>
-    <style>
-        body {{ margin: 0; background-color: #020617; overflow: hidden; width: 100vw; height: 100vh; display: flex; justify-content: center; align-items: center; }}
-        canvas {{ display: block; image-rendering: -webkit-optimize-contrast; image-rendering: crisp-edges; }}
-    </style>
-    </head>
-    <body>
+    html_standard = f"""
+    <!DOCTYPE html><html><head><style>
+        body {{ margin: 0; background-color: #020617; overflow: hidden; display: flex; justify-content: center; align-items: center; height: 700px; }}
+        canvas {{ display: block; }}
+    </style></head><body>
     <canvas id="canvas"></canvas>
     <script>
         const canvas = document.getElementById('canvas');
         const ctx = canvas.getContext('2d');
-        const data = {json.dumps(animation_data)};
+        const data = {animation_data_json};
         const bgData = "data:image/png;base64,{bg_b64}";
-        const activeColors = {json.dumps(selected_colors)};
         
-        const LIMIT = 500; const RANGE = 1000;
-        const DURATION_FRAMES = 8000; const RIPPLE_CYCLE = 640; 
-        
-        // フィルター操作でリセットされないためのセッション管理
-        if (!window.sessionStorage.getItem('animStartTime')) {{
-            window.sessionStorage.setItem('animStartTime', Date.now());
-        }}
-        const startTime = parseInt(window.sessionStorage.getItem('animStartTime'));
-
+        let startTime = Date.now(); // 毎回リセットされる時計
         let bgImage = new Image();
         let size, offsetX, offsetY;
+        const LIMIT = 500, RANGE = 1000, RIPPLE_CYCLE = 640;
 
         function resize() {{
             const dpr = window.devicePixelRatio || 1;
-            canvas.width = window.innerWidth * dpr;
-            canvas.height = window.innerHeight * dpr;
-            canvas.style.width = window.innerWidth + 'px';
-            canvas.style.height = window.innerHeight + 'px';
+            canvas.width = 800 * dpr; canvas.height = 600 * dpr;
+            canvas.style.width = '800px'; canvas.style.height = '600px';
             ctx.scale(dpr, dpr);
-            size = Math.min(window.innerWidth, window.innerHeight);
-            offsetX = (window.innerWidth - size) / 2;
-            offsetY = (window.innerHeight - size) / 2;
+            size = 600; offsetX = 100; offsetY = 0;
         }}
-        window.addEventListener('resize', resize);
         resize();
-        
-        bgImage.onload = () => {{ requestAnimationFrame(loop); }};
         bgImage.src = bgData;
-        
+        bgImage.onload = () => requestAnimationFrame(loop);
+
         const mapX = (x) => offsetX + ((x + LIMIT) / RANGE) * size;
         const mapY = (y) => offsetY + size * (1 - (y + LIMIT) / RANGE);
 
         function loop() {{
-            const now = Date.now();
-            const elapsed = (now - startTime) / 50; 
+            const elapsed = (Date.now() - startTime) / 50;
+            ctx.clearRect(0,0,canvas.width,canvas.height);
+            ctx.drawImage(bgImage, 0, 0, 800, 600);
             
-            ctx.clearRect(0, 0, canvas.width, canvas.height);
-            ctx.imageSmoothingEnabled = false; 
-            
-            // 背景（瞬きなし、不透明度固定）
-            ctx.globalAlpha = 1.0;
-            ctx.drawImage(bgImage, 0, 0, window.innerWidth, window.innerHeight);
-            
-            // 線の描画
             data.lines.forEach(l => {{
                 if (elapsed >= l.delay) {{
-                    const n1 = data.nodes[l.source]; const n2 = data.nodes[l.target];
-                    const isVisible = activeColors.length === 0 || activeColors.includes(n1.color) || activeColors.includes(n2.color);
-                    if (isVisible) {{
-                        const alphaBase = Math.min(0.4, (elapsed - l.delay) / 320);
-                        ctx.beginPath();
-                        ctx.moveTo(mapX(n1.x), mapY(n1.y));
-                        ctx.lineTo(mapX(n2.x), mapY(n2.y));
-                        ctx.strokeStyle = "rgba(255, 255, 255, " + alphaBase + ")";
-                        ctx.lineWidth = 1.0; ctx.stroke();
-                    }}
+                    const n1 = data.nodes[l.source], n2 = data.nodes[l.target];
+                    const alpha = Math.min(0.4, (elapsed - l.delay) / 320);
+                    ctx.beginPath(); ctx.moveTo(mapX(n1.x), mapY(n1.y)); ctx.lineTo(mapX(n2.x), mapY(n2.y));
+                    ctx.strokeStyle = "rgba(255, 255, 255, " + alpha + ")"; ctx.lineWidth = 1; ctx.stroke();
                 }}
             }});
-            
-            // 点と波紋
             data.nodes.forEach(n => {{
                 if (elapsed >= n.delay) {{
-                    const isSelected = activeColors.length === 0 || activeColors.includes(n.color);
-                    const baseAlpha = Math.min(1.0, (elapsed - n.delay) / 120);
+                    const alpha = Math.min(1.0, (elapsed - n.delay) / 120);
+                    const x = mapX(n.x), y = mapY(n.y);
+                    const relFrame = (elapsed - n.delay) % RIPPLE_CYCLE;
+                    const progress = relFrame / RIPPLE_CYCLE;
                     
-                    // 非選択項目は透明度0.1でうっすら表示
-                    const alpha = isSelected ? baseAlpha : baseAlpha * 0.1;
-                    const x = mapX(n.x); const y = mapY(n.y);
-                    
-                    // --- 波紋の描画 (太さ3.0、濃度1.2) ---
-                    if (isSelected) {{
-                        const relFrame = (elapsed - n.delay) % RIPPLE_CYCLE;
-                        const progress = relFrame / RIPPLE_CYCLE;
-                        const rPx = (progress * (n.score * 4.5) / RANGE) * size;
-                        ctx.beginPath();
-                        ctx.arc(x, y, rPx, 0, Math.PI * 2);
-                        ctx.strokeStyle = n.color;
-                        ctx.lineWidth = 3.0; 
-                        ctx.globalAlpha = Math.max(0, 1.2 * (1 - progress)); 
-                        ctx.stroke();
-                        ctx.globalAlpha = 1.0;
-                    }}
+                    ctx.beginPath(); ctx.arc(x, y, (progress * (n.score * 4.5) / RANGE) * size, 0, Math.PI*2);
+                    ctx.strokeStyle = n.color; ctx.lineWidth = 3; ctx.globalAlpha = Math.max(0, 1.2 * (1 - progress)); ctx.stroke(); ctx.globalAlpha = 1;
 
-                    // --- 二重の白円グロウ効果 (デザイン復元) ---
-                    // 外側の大きな円 (不透明度 0.075)
-                    ctx.beginPath();
-                    ctx.arc(x, y, (80/RANGE * size / 2), 0, Math.PI*2);
-                    ctx.fillStyle = "rgba(255, 255, 255, " + (alpha * 0.075) + ")";
-                    ctx.fill();
-                    
-                    // 内側の円 (不透明度 0.2)
-                    ctx.beginPath();
-                    ctx.arc(x, y, (40/RANGE * size / 2 * 0.7), 0, Math.PI*2);
-                    ctx.fillStyle = "rgba(255, 255, 255, " + (alpha * 0.2) + ")";
-                    ctx.fill();
-                    
-                    // 中心点
-                    ctx.beginPath();
-                    ctx.arc(x, y, 3, 0, Math.PI*2); 
-                    ctx.fillStyle = "rgba(255, 255, 255, " + (alpha * 0.9) + ")";
-                    ctx.fill();
-                    
-                    // 名前 (サイズ 9px)
-                    ctx.fillStyle = "rgba(255, 255, 255, " + (alpha * 0.7) + ")";
-                    ctx.font = 'bold 9px sans-serif'; 
-                    ctx.fillText(n.name, x + 8, y - 5);
+                    ctx.beginPath(); ctx.arc(x, y, (80/RANGE*size/2), 0, Math.PI*2); ctx.fillStyle = "rgba(255,255,255,"+(alpha*0.075)+")"; ctx.fill();
+                    ctx.beginPath(); ctx.arc(x, y, (40/RANGE*size/2*0.7), 0, Math.PI*2); ctx.fillStyle = "rgba(255,255,255,"+(alpha*0.2)+")"; ctx.fill();
+                    ctx.beginPath(); ctx.arc(x, y, 3, 0, Math.PI*2); ctx.fillStyle = "rgba(255,255,255,"+(alpha*0.9)+")"; ctx.fill();
+                    ctx.fillStyle = "rgba(255,255,255,"+(alpha*0.7)+")"; ctx.font = 'bold 9px sans-serif'; ctx.fillText(n.name, x+8, y-5);
                 }}
             }});
             requestAnimationFrame(loop);
         }}
-    </script>
-    </body>
-    </html>
+    </script></body></html>
     """
-    components.html(html_code, height=750, scrolling=False)
+    components.html(html_standard, height=650)
 
-# --- 静止画エリア (Zoom機能付き) ---
-static_path = "static_network_glow.png"
-if os.path.exists(static_path):
-    st.divider()
-    st.subheader("静止画 (Motionless) - Zoomable")
-    with open(static_path, "rb") as f:
-        img_b64 = base64.b64encode(f.read()).decode()
-    
-    html_static = f"""
-    <!DOCTYPE html>
-    <html>
-    <head>
-    <style>
-        body {{ margin: 0; overflow: hidden; background-color: #020617; display: flex; justify-content: center; align-items: center; height: 100vh; }}
-        #container {{ width: 100%; height: 100%; max-width: 750px; aspect-ratio: 1 / 1; overflow: hidden; position: relative; }}
-        img {{ transform-origin: 0 0; width: 100%; height: 100%; object-fit: contain; display: block; pointer-events: none; }}
-    </style>
-    </head>
-    <body>
-        <div id="container"><img id="zoom-img" src="data:image/png;base64,{img_b64}" /></div>
-        <script>
-            const container = document.getElementById('container');
-            const img = document.getElementById('zoom-img');
-            let scale = 1, pointX = 0, pointY = 0;
-            function update() {{ img.style.transform = `translate(${{pointX}}px, ${{pointY}}px) scale(${{scale}})`; }}
-            container.addEventListener('wheel', (e) => {{
-                if (e.ctrlKey) {{
-                    e.preventDefault();
-                    const rect = container.getBoundingClientRect();
-                    const mx = e.clientX - rect.left, my = e.clientY - rect.top;
-                    const xs = (mx - pointX) / scale, ys = (my - pointY) / scale;
-                    const factor = e.deltaY > 0 ? 0.9 : 1.1;
-                    scale = Math.min(Math.max(1, scale * factor), 20);
-                    pointX = mx - xs * scale; pointY = my - ys * scale;
-                    if (scale === 1) {{ pointX = 0; pointY = 0; }}
-                    update();
+# --- 2. カテゴリーフィルター付・アニメーション (シームレス再生) ---
+st.divider()
+st.subheader("🔍 インタラクティブ・分析 (カテゴリーフィルター)")
+
+selected_colors = []
+if os.path.exists(json_path):
+    with open(json_path, "r", encoding='utf-8') as f:
+        tmp_data = json.load(f)
+    all_colors = sorted(list(set([n['color'] for n in tmp_data['nodes']])))
+    selected_colors = st.multiselect("表示する色のカテゴリーを選択", options=all_colors, default=[])
+
+    html_interactive = f"""
+    <!DOCTYPE html><html><head><style>
+        body {{ margin: 0; background-color: #020617; overflow: hidden; display: flex; justify-content: center; align-items: center; height: 700px; }}
+        canvas {{ display: block; }}
+    </style></head><body>
+    <canvas id="canvas_int"></canvas>
+    <script>
+        const canvas = document.getElementById('canvas_int');
+        const ctx = canvas.getContext('2d');
+        const data = {animation_data_json};
+        const activeColors = {json.dumps(selected_colors)};
+        const bgData = "data:image/png;base64,{bg_b64}";
+        
+        // セッションストレージで時間を維持
+        if (!window.sessionStorage.getItem('animStartTime')) window.sessionStorage.setItem('animStartTime', Date.now());
+        const startTime = parseInt(window.sessionStorage.getItem('animStartTime'));
+
+        let bgImage = new Image();
+        const LIMIT = 500, RANGE = 1000, RIPPLE_CYCLE = 640;
+        let size=600, offsetX=100, offsetY=0;
+
+        function resize() {{
+            const dpr = window.devicePixelRatio || 1;
+            canvas.width = 800 * dpr; canvas.height = 600 * dpr;
+            canvas.style.width = '800px'; canvas.style.height = '600px';
+            ctx.scale(dpr, dpr);
+        }}
+        resize();
+        bgImage.src = bgData;
+        bgImage.onload = () => requestAnimationFrame(loop);
+
+        const mapX = (x) => offsetX + ((x + LIMIT) / RANGE) * size;
+        const mapY = (y) => offsetY + size * (1 - (y + LIMIT) / RANGE);
+
+        function loop() {{
+            const elapsed = (Date.now() - startTime) / 50;
+            ctx.clearRect(0,0,canvas.width,canvas.height);
+            ctx.drawImage(bgImage, 0, 0, 800, 600);
+            
+            data.lines.forEach(l => {{
+                if (elapsed >= l.delay) {{
+                    const n1 = data.nodes[l.source], n2 = data.nodes[l.target];
+                    const isVis = activeColors.length === 0 || activeColors.includes(n1.color) || activeColors.includes(n2.color);
+                    if (isVis) {{
+                        const alpha = Math.min(0.4, (elapsed - l.delay) / 320);
+                        ctx.beginPath(); ctx.moveTo(mapX(n1.x), mapY(n1.y)); ctx.lineTo(mapX(n2.x), mapY(n2.y));
+                        ctx.strokeStyle = "rgba(255, 255, 255, " + alpha + ")"; ctx.lineWidth = 1; ctx.stroke();
+                    }}
                 }}
-            }}, {{ passive: false }});
-        </script>
-    </body>
-    </html>
+            }});
+            data.nodes.forEach(n => {{
+                if (elapsed >= n.delay) {{
+                    const isSel = activeColors.length === 0 || activeColors.includes(n.color);
+                    const baseAlpha = Math.min(1.0, (elapsed - n.delay) / 120);
+                    const alpha = isSel ? baseAlpha : baseAlpha * 0.1;
+                    const x = mapX(n.x), y = mapY(n.y);
+                    
+                    if (isSel) {{
+                        const relFrame = (elapsed - n.delay) % RIPPLE_CYCLE;
+                        const progress = relFrame / RIPPLE_CYCLE;
+                        ctx.beginPath(); ctx.arc(x, y, (progress * (n.score * 4.5) / RANGE) * size, 0, Math.PI*2);
+                        ctx.strokeStyle = n.color; ctx.lineWidth = 3; ctx.globalAlpha = Math.max(0, 1.2 * (1 - progress)); ctx.stroke(); ctx.globalAlpha = 1;
+                    }}
+                    ctx.beginPath(); ctx.arc(x, y, (80/RANGE*size/2), 0, Math.PI*2); ctx.fillStyle = "rgba(255,255,255,"+(alpha*0.075)+")"; ctx.fill();
+                    ctx.beginPath(); ctx.arc(x, y, (40/RANGE*size/2*0.7), 0, Math.PI*2); ctx.fillStyle = "rgba(255,255,255,"+(alpha*0.2)+")"; ctx.fill();
+                    ctx.beginPath(); ctx.arc(x, y, 3, 0, Math.PI*2); ctx.fillStyle = "rgba(255,255,255,"+(alpha*0.9)+")"; ctx.fill();
+                    ctx.fillStyle = "rgba(255,255,255,"+(alpha*0.7)+")"; ctx.font = 'bold 9px sans-serif'; ctx.fillText(n.name, x+8, y-5);
+                }}
+            }});
+            requestAnimationFrame(loop);
+        }}
+    </script></body></html>
     """
-    components.html(html_static, height=750)
+    components.html(html_interactive, height=650)
+
+# --- 3. データテーブル表示 ---
+st.divider()
+st.subheader("📊 アンケート元データ")
+if os.path.exists("survey_data.csv"):
+    df = pd.read_csv("survey_data.csv")
+    st.dataframe(df, use_container_width=True)
+else:
+    st.info("データがアップロードされていません。")
