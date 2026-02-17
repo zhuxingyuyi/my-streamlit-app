@@ -1,3 +1,4 @@
+import numpy
 import streamlit as st
 import streamlit.components.v1 as components
 import pandas as pd
@@ -368,3 +369,4 @@ st.markdown("""
 - **Q5**: (内部計算用: リンクのつながりやすさ等)
 - **Q6_Gift**: (予備)
 """)
+
