@@ -2,7 +2,6 @@ import streamlit as st
 import streamlit.components.v1 as components
 import pandas as pd
 import os
-import shutil
 import json
 import base64
 
@@ -13,41 +12,30 @@ st.set_page_config(page_title="ファイブエムOS 可視化プロト", layout=
 st.title("🌌 ファイブエムOS 可視化プロト")
 st.write("アンケート結果を『共鳴のエコー』として可視化します。")
 
-
 # --- サイドバー：データ管理 ---
 st.sidebar.header("🛠 データ管理")
 
-# 1. CSVアップロード
 uploaded_file = st.sidebar.file_uploader("新しいデータをアップロード (CSV)", type="csv")
-
 if uploaded_file is not None:
-    # Save the uploaded file
     with open("survey_data.csv", "wb") as f:
         f.write(uploaded_file.getbuffer())
     st.sidebar.success("データが更新されました！アニメーションを再生成してください。")
 
-# 2. アニメーション再生成ボタン
 if st.sidebar.button("🎥 アニメーションを生成/更新"):
     with st.spinner('データを更新しています...'):
         try:
-            # 直接importして実行（Streamlit Cloud環境でのライブラリ不整合回避）
             import gen_animation
-            # もしgen_animation.pyが関数化されているなら実行、
-            # そうでなければimportした時点でトップレベルのコードが実行されます。
             st.success("更新完了！")
             st.rerun() 
         except Exception as e:
             st.error(f"実行エラー: {e}")
 
 # --- メイン表示エリア ---
-
-# アニメーション表示
 json_path = "animation_data.json"
 bg_path = "universe_bg.png"
 
 if os.path.exists(json_path):
     st.subheader("共鳴アニメーション (Real-time Render)")
-    
     with open(json_path, "r", encoding='utf-8') as f:
         animation_data = json.load(f)
     
@@ -56,18 +44,14 @@ if os.path.exists(json_path):
         with open(bg_path, "rb") as f:
             bg_b64 = base64.b64encode(f.read()).decode('utf-8')
             
-    # 高解像度ディスプレイ(DPR)対応版 JavaScript/HTML
+    # JavaScript内の $ 記号を Python が誤解しないよう、{{ }} でエスケープしています
     html_code = f"""
     <!DOCTYPE html>
     <html>
     <head>
     <style>
         body {{ margin: 0; background-color: #020617; overflow: hidden; width: 100vw; height: 100vh; display: flex; justify-content: center; align-items: center; }}
-        canvas {{ 
-            display: block;
-            image-rendering: -webkit-optimize-contrast; /* ブラウザ側のボケ防止 */
-            image-rendering: crisp-edges;
-        }}
+        canvas {{ display: block; image-rendering: -webkit-optimize-contrast; image-rendering: crisp-edges; }}
     </style>
     </head>
     <body>
@@ -75,35 +59,83 @@ if os.path.exists(json_path):
     <script>
         const canvas = document.getElementById('canvas');
         const ctx = canvas.getContext('2d');
-        
         const data = {json.dumps(animation_data)};
         const bgData = "data:image/png;base64,{bg_b64}";
         
-        const LIMIT = 500; 
-        const RANGE = 1000;
-        const DURATION_FRAMES = 4000; 
-        const RIPPLE_CYCLE = 640; 
-        
-        let frame = 0;
-        let startTime = null;
-        let bgImage = new Image();
-        let size = 1000;
-        let offsetX = 0;
-        let offsetY = 0;
-        let dpr = window.devicePixelRatio || 1;
+        const LIMIT = 500; const RANGE = 1000;
+        const DURATION_FRAMES = 4000; const RIPPLE_CYCLE = 640; 
+        let frame = 0; let startTime = null; let bgImage = new Image();
+        let size, offsetX, offsetY;
 
         function resize() {{
-            dpr = window.devicePixelRatio || 1;
-            // 物理ピクセルサイズに合わせる
+            const dpr = window.devicePixelRatio || 1;
             canvas.width = window.innerWidth * dpr;
             canvas.height = window.innerHeight * dpr;
-            // CSSでの表示サイズ
             canvas.style.width = window.innerWidth + 'px';
             canvas.style.height = window.innerHeight + 'px';
-            
-            // 描画コンテキストをスケールアップ（これで文字がシャープになる）
             ctx.scale(dpr, dpr);
-            
             size = Math.min(window.innerWidth, window.innerHeight);
             offsetX = (window.innerWidth - size) / 2;
-            offset
+            offsetY = (window.innerHeight - size) / 2;
+        }}
+        window.addEventListener('resize', resize);
+        resize();
+        
+        bgImage.onload = () => {{ requestAnimationFrame(loop); }};
+        bgImage.src = bgData;
+        
+        const mapX = (x) => offsetX + ((x + LIMIT) / RANGE) * size;
+        const mapY = (y) => offsetY + size * (1 - (y + LIMIT) / RANGE);
+
+        function loop(timestamp) {{
+            if (!startTime) startTime = timestamp;
+            frame = Math.floor((timestamp - startTime) / 50);
+            ctx.imageSmoothingEnabled = false; 
+            
+            const bgRatio = bgImage.width / bgImage.height;
+            const canvasRatio = window.innerWidth / window.innerHeight;
+            let dw, dh, dx, dy;
+            if (canvasRatio > bgRatio) {{
+                dw = window.innerWidth; dh = window.innerWidth / bgRatio;
+                dx = 0; dy = (window.innerHeight - dh) / 2;
+            }} else {{
+                dh = window.innerHeight; dw = window.innerHeight * bgRatio;
+                dx = (window.innerWidth - dw) / 2; dy = 0;
+            }}
+            ctx.drawImage(bgImage, dx, dy, dw, dh);
+            
+            data.lines.forEach(l => {{
+                if (frame >= l.delay) {{
+                    const alphaBase = Math.min(0.4, (frame - l.delay) / 320);
+                    if (alphaBase > 0) {{
+                        const n1 = data.nodes[l.source]; const n2 = data.nodes[l.target];
+                        ctx.beginPath();
+                        ctx.moveTo(mapX(n1.x), mapY(n1.y));
+                        ctx.lineTo(mapX(n2.x), mapY(n2.y));
+                        ctx.strokeStyle = `rgba(255, 247, 214, ${{alphaBase}})`;
+                        ctx.lineWidth = 1.0; ctx.stroke();
+                    }}
+                }}
+            }});
+            
+            data.nodes.forEach(n => {{
+                if (frame >= n.delay) {{
+                    const alpha = Math.min(1.0, (frame - n.delay) / 120);
+                    const x = mapX(n.x); const y = mapY(n.y);
+                    const relFrame = (frame - n.delay) % RIPPLE_CYCLE;
+                    const progress = relFrame / RIPPLE_CYCLE;
+                    const rPx = (progress * (n.score * 4.5) / RANGE) * size;
+                    
+                    if (progress < 1.0) {{
+                        ctx.beginPath();
+                        ctx.arc(x, y, rPx, 0, Math.PI * 2);
+                        ctx.strokeStyle = n.color;
+                        ctx.lineWidth = 2.0; 
+                        ctx.globalAlpha = 1.0 - progress;
+                        ctx.stroke();
+                        ctx.globalAlpha = 1.0;
+                    }}
+                    
+                    ctx.beginPath();
+                    ctx.arc(x, y, 3, 0, Math.PI*2); 
+                    ctx.fillStyle = `rgba(255, 255, 255, ${{alpha * 0.9
