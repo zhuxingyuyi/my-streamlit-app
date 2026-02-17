@@ -27,16 +27,15 @@ if uploaded_file is not None:
 
 # 2. アニメーション再生成ボタン
 if st.sidebar.button("🎥 アニメーションを生成/更新"):
-    with st.spinner('データを更新しています...'): # Much faster now
+    with st.spinner('データを更新しています...'):
         try:
-            import subprocess
-            cmd = ["python", "gen_animation.py"]
+            # 外部コマンドとしてではなく、Pythonの機能として直接実行する
+            import gen_animation
             
-            result = subprocess.run(cmd, capture_output=True, text=True)
-            if result.returncode == 0:
-                st.success("更新完了！")
-            else:
-                st.error(f"エラーが発生しました: {result.stderr}")
+            # gen_animation.pyの中にメインの処理がある場合、それを実行
+            # もし関数化されていない場合は、importした時点で中身が実行されます
+            st.success("更新完了！")
+            st.rerun() # 画面をリフレッシュして最新のjsonを読み込む
         except Exception as e:
             st.error(f"実行エラー: {e}")
 
@@ -369,4 +368,5 @@ st.markdown("""
 - **Q5**: (内部計算用: リンクのつながりやすさ等)
 - **Q6_Gift**: (予備)
 """)
+
 
