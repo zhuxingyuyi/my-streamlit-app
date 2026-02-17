@@ -125,27 +125,29 @@ if os.path.exists(json_path):
                     const progress = relFrame / RIPPLE_CYCLE;
                     const rPx = (progress * (n.score * 4.5) / RANGE) * size;
                     
+                    // --- 波紋の描画 (色をより濃く維持) ---
                     if (progress < 1.0) {{
                         ctx.beginPath();
                         ctx.arc(x, y, rPx, 0, Math.PI * 2);
                         ctx.strokeStyle = n.color;
                         ctx.lineWidth = 3.0; 
-                        ctx.globalAlpha = 1.0 - progress;
+                        // 最大透明度を1.0に固定し、progressによる減衰を緩やかに
+                        ctx.globalAlpha = Math.max(0, 1.2 * (1 - progress)); 
                         ctx.stroke();
                         ctx.globalAlpha = 1.0;
                     }}
 
-                    // --- 二重の白円グロウ効果 (透明度を下げて濃く修正) ---
-                    // 外側の大きな円 (0.05 -> 0.10)
+                    // --- 二重の白円グロウ効果 (透明度の調整) ---
+                    // 外側の大きな円 (0.1 -> 0.075)
                     ctx.beginPath();
                     ctx.arc(x, y, (80/RANGE * size / 2), 0, Math.PI*2);
-                    ctx.fillStyle = "rgba(255, 255, 255, " + (alpha * 0.1) + ")";
+                    ctx.fillStyle = "rgba(255, 255, 255, " + (alpha * 0.075) + ")";
                     ctx.fill();
                     
-                    // 内側の円 (0.15 -> 0.30)
+                    // 内側の円 (0.3 -> 0.2)
                     ctx.beginPath();
                     ctx.arc(x, y, (40/RANGE * size / 2 * 0.7), 0, Math.PI*2);
-                    ctx.fillStyle = "rgba(255, 255, 255, " + (alpha * 0.3) + ")";
+                    ctx.fillStyle = "rgba(255, 255, 255, " + (alpha * 0.2) + ")";
                     ctx.fill();
                     
                     ctx.beginPath();
@@ -168,7 +170,7 @@ if os.path.exists(json_path):
 else:
     st.info("👈 サイドバーから「アニメーションを生成」ボタンを押してください。")
 
-# --- メイン表示エリア：静止画 (Zoom機能) ---
+# --- 静止画表示 ---
 static_glow_path = "static_network_glow.png"
 if os.path.exists(static_glow_path):
     st.subheader("静止画 (Motionless) - Zoomable")
