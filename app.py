@@ -104,23 +104,25 @@ if os.path.exists(json_path):
         let offsetX = 0;
         let offsetY = 0;
 
-        function resize() {{
-            canvas.width = window.innerWidth;
-            canvas.height = window.innerHeight;
-            
-            // Calculate scale to fit simulation (RANGE=1000) into min dimension
-            // BUT user wants "Animation Target Range" to cover screen?
-            // If we just center, corners are empty.
-            // PROPOSAL: Scale so RANGE fits the *smallest* dimension (contain) OR *largest* (cover)?
-            // Usually "contain" ensures all nodes are visible. 
-            // "Target Range" usually means the simulation coordinate system maps to the screen?
-            // We will stick to "contain" logic for safety so nodes don't go offscreen, 
-            // but the background will fill the screen.
-            
-            size = Math.min(canvas.width, canvas.height);
-            offsetX = (canvas.width - size) / 2;
-            offsetY = (canvas.height - size) / 2;
-        }}
+        function resize() function resize() {
+    // 画面の解像度比率を取得（通常のPCなら1、高精細なスマホやMacなら2〜3）
+    const dpr = window.devicePixelRatio || 1;
+    
+    // キャンバスの実質的な解像度を倍にする
+    canvas.width = window.innerWidth * dpr;
+    canvas.height = window.innerHeight * dpr;
+    
+    // 見た目のサイズは画面いっぱいのままにする
+    canvas.style.width = window.innerWidth + 'px';
+    canvas.style.height = window.innerHeight + 'px';
+    
+    // 全ての描画を倍率に合わせてスケールアップする
+    ctx.scale(dpr, dpr);
+    
+    size = Math.min(window.innerWidth, window.innerHeight);
+    offsetX = (window.innerWidth - size) / 2;
+    offsetY = (window.innerHeight - size) / 2;
+}
         window.addEventListener('resize', resize);
         resize();
         
@@ -156,6 +158,12 @@ if os.path.exists(json_path):
                 dx = (canvas.width - dw) / 2;
                 dy = 0;
             }}
+            // 画像の補完（ぼかし）を無効にする
+ctx.imageSmoothingEnabled = false;
+
+// 文字の縁取りをよりハッキリさせる
+ctx.textBaseline = 'middle';
+ctx.font = 'bold 12px "Inter", "Hiragino Kaku Gothic ProN", sans-serif';
             ctx.drawImage(bgImage, dx, dy, dw, dh);
             
             // Helper to get alpha
@@ -368,5 +376,6 @@ st.markdown("""
 - **Q5**: (内部計算用: リンクのつながりやすさ等)
 - **Q6_Gift**: (予備)
 """)
+
 
 
