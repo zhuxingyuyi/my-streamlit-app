@@ -1,9 +1,10 @@
-import numpy
 import streamlit as st
 import streamlit.components.v1 as components
 import pandas as pd
 import os
 import shutil
+import json
+import base64
 
 # ページ設定
 st.set_page_config(page_title="ファイブエムOS 可視化プロト", layout="wide")
@@ -29,13 +30,12 @@ if uploaded_file is not None:
 if st.sidebar.button("🎥 アニメーションを生成/更新"):
     with st.spinner('データを更新しています...'):
         try:
-            # 外部コマンドとしてではなく、Pythonの機能として直接実行する
+            # 直接importして実行（Streamlit Cloud環境でのライブラリ不整合回避）
             import gen_animation
-            
-            # gen_animation.pyの中にメインの処理がある場合、それを実行
-            # もし関数化されていない場合は、importした時点で中身が実行されます
+            # もしgen_animation.pyが関数化されているなら実行、
+            # そうでなければimportした時点でトップレベルのコードが実行されます。
             st.success("更新完了！")
-            st.rerun() # 画面をリフレッシュして最新のjsonを読み込む
+            st.rerun() 
         except Exception as e:
             st.error(f"実行エラー: {e}")
 
@@ -48,10 +48,6 @@ bg_path = "universe_bg.png"
 if os.path.exists(json_path):
     st.subheader("共鳴アニメーション (Real-time Render)")
     
-    import json
-    import base64
-    import streamlit.components.v1 as components
-
     with open(json_path, "r", encoding='utf-8') as f:
         animation_data = json.load(f)
     
@@ -60,7 +56,7 @@ if os.path.exists(json_path):
         with open(bg_path, "rb") as f:
             bg_b64 = base64.b64encode(f.read()).decode('utf-8')
             
-    # Pass data to JS via template
+    # 高解像度ディスプレイ(DPR)対応版 JavaScript/HTML
     html_code = f"""
     <!DOCTYPE html>
     <html>
@@ -68,9 +64,9 @@ if os.path.exists(json_path):
     <style>
         body {{ margin: 0; background-color: #020617; overflow: hidden; width: 100vw; height: 100vh; display: flex; justify-content: center; align-items: center; }}
         canvas {{ 
-            width: 100%; 
-            height: 100%; 
             display: block;
+            image-rendering: -webkit-optimize-contrast; /* ブラウザ側のボケ防止 */
+            image-rendering: crisp-edges;
         }}
     </style>
     </head>
@@ -80,303 +76,34 @@ if os.path.exists(json_path):
         const canvas = document.getElementById('canvas');
         const ctx = canvas.getContext('2d');
         
-        // Data from Python
         const data = {json.dumps(animation_data)};
         const bgData = "data:image/png;base64,{bg_b64}";
         
-        // Config
-        const LIMIT = 500; // -500 to 500
+        const LIMIT = 500; 
         const RANGE = 1000;
-        const FPS = 20; // Original simulation FPS
-        const DURATION_FRAMES = 4000; // 200s (Extended x2)
+        const DURATION_FRAMES = 4000; 
         const RIPPLE_CYCLE = 640; 
         
         let frame = 0;
         let startTime = null;
         let bgImage = new Image();
-        
-        bgImage.onload = () => {{
-            requestAnimationFrame(loop);
-        }};
-        bgImage.src = bgData;
-        
         let size = 1000;
         let offsetX = 0;
         let offsetY = 0;
+        let dpr = window.devicePixelRatio || 1;
 
-        function resize() function resize() {{
-    // 画面の解像度比率を取得（通常のPCなら1、高精細なスマホやMacなら2〜3）
-    const dpr = window.devicePixelRatio || 1;
-    
-    // キャンバスの実質的な解像度を倍にする
-    canvas.width = window.innerWidth * dpr;
-    canvas.height = window.innerHeight * dpr;
-    
-    // 見た目のサイズは画面いっぱいのままにする
-    canvas.style.width = window.innerWidth + 'px';
-    canvas.style.height = window.innerHeight + 'px';
-    
-    // 全ての描画を倍率に合わせてスケールアップする
-    ctx.scale(dpr, dpr);
-    
-    size = Math.min(window.innerWidth, window.innerHeight);
-    offsetX = (window.innerWidth - size) / 2;
-    offsetY = (window.innerHeight - size) / 2;
-}}
-        window.addEventListener('resize', resize);
-        resize();
-        
-        function mapX(x) {{
-            return offsetX + ((x + LIMIT) / RANGE) * size;
-        }}
-        
-        function mapY(y) {{
-            // Invert Y
-            return offsetY + size * (1 - (y + LIMIT) / RANGE);
-        }}
-
-        function loop(timestamp) {{
-            if (!startTime) startTime = timestamp;
-            const elapsed = timestamp - startTime;
+        function resize() {{
+            dpr = window.devicePixelRatio || 1;
+            // 物理ピクセルサイズに合わせる
+            canvas.width = window.innerWidth * dpr;
+            canvas.height = window.innerHeight * dpr;
+            // CSSでの表示サイズ
+            canvas.style.width = window.innerWidth + 'px';
+            canvas.style.height = window.innerHeight + 'px';
             
-            // Sync frame to elapsed time (50ms per frame)
-            frame = Math.floor(elapsed / 50);
+            // 描画コンテキストをスケールアップ（これで文字がシャープになる）
+            ctx.scale(dpr, dpr);
             
-            // Draw Background (Cover Mode)
-            const bgRatio = bgImage.width / bgImage.height;
-            const canvasRatio = canvas.width / canvas.height;
-            let dw, dh, dx, dy;
-            
-            if (canvasRatio > bgRatio) {{
-                dw = canvas.width;
-                dh = canvas.width / bgRatio;
-                dx = 0;
-                dy = (canvas.height - dh) / 2;
-            }} else {{
-                dh = canvas.height;
-                dw = canvas.height * bgRatio;
-                dx = (canvas.width - dw) / 2;
-                dy = 0;
-            }}
-            // 画像の補完（ぼかし）を無効にする
-ctx.imageSmoothingEnabled = false;
-
-// 文字の縁取りをよりハッキリさせる
-ctx.textBaseline = 'middle';
-ctx.font = 'bold 12px "Inter", "Hiragino Kaku Gothic ProN", sans-serif';
-            ctx.drawImage(bgImage, dx, dy, dw, dh);
-            
-            // Helper to get alpha
-            function getAlpha(delay) {{
-                if (frame < delay) return 0;
-                return Math.min(1.0, (frame - delay) / 120); 
-            }}
-            
-            // Draw Lines
-            data.lines.forEach(l => {{
-                if (frame >= l.delay) {{
-                    const alphaBase = Math.min(0.4, (frame - l.delay) / 320);
-                    if (alphaBase > 0) {{
-                        const n1 = data.nodes[l.source];
-                        const n2 = data.nodes[l.target];
-                        
-                        ctx.beginPath();
-                        ctx.moveTo(mapX(n1.x), mapY(n1.y));
-                        ctx.lineTo(mapX(n2.x), mapY(n2.y));
-                        ctx.strokeStyle = `rgba(255, 247, 214, ${{alphaBase}})`;
-                        ctx.lineWidth = 1.0; 
-                        ctx.stroke();
-                    }}
-                }}
-            }});
-            
-            // Draw Nodes & Ripples
-            data.nodes.forEach(n => {{
-                if (frame >= n.delay) {{
-                    const alpha = getAlpha(n.delay);
-                    const x = mapX(n.x);
-                    const y = mapY(n.y);
-                    
-                    // Ripple
-                    const relFrame = (frame - n.delay) % RIPPLE_CYCLE;
-                    const maxR = n.score * 4.5;
-                    const progress = relFrame / RIPPLE_CYCLE;
-                    const r = progress * maxR; 
-                    // Map size: relative to the simulation scale 'size'
-                    const rPx = (r / RANGE) * size;
-                    
-                    const rippleAlpha = Math.max(0, 1.0 * (1 - progress));
-                    
-                    if (rippleAlpha > 0) {{
-                        ctx.beginPath();
-                        ctx.arc(x, y, rPx, 0, Math.PI * 2);
-                        ctx.strokeStyle = n.color;
-                        ctx.lineWidth = 5.0 * (size / 1000); 
-                        ctx.globalAlpha = rippleAlpha;
-                        ctx.stroke();
-                        ctx.globalAlpha = 1.0;
-                    }}
-                    
-                    // Star Glow
-                    ctx.beginPath();
-                    ctx.arc(x, y, 80/RANGE * size / 2, 0, Math.PI*2); 
-                    ctx.fillStyle = `rgba(255, 247, 214, ${{alpha * 0.075}})`;
-                    ctx.fill();
-                    
-                    ctx.beginPath();
-                    ctx.arc(x, y, 40/RANGE * size / 2 * 0.7, 0, Math.PI*2);
-                    ctx.fillStyle = `rgba(255, 247, 214, ${{alpha * 0.2}})`;
-                    ctx.fill();
-
-                    // Star Core
-                    ctx.beginPath();
-                    ctx.arc(x, y, 3, 0, Math.PI*2); 
-                    ctx.fillStyle = `rgba(255, 255, 255, ${{alpha * 0.9}})`;
-                    ctx.fill();
-                    
-                    // Name
-                    ctx.fillStyle = `rgba(255, 247, 214, ${{alpha * 0.8}})`;
-                    ctx.font = 'bold 10px sans-serif';
-                    ctx.fillText(n.name, x + 5, y - 5);
-                }}
-            }});
-            
-            if (frame < DURATION_FRAMES) {{
-                requestAnimationFrame(loop);
-            }}
-        }}
-        
-        requestAnimationFrame(loop);
-    </script>
-    </body>
-    </html>
-    """
-    
-    components.html(html_code, height=750, scrolling=False)
-
-else:
-    st.info("👈 サイドバーから「アニメーションを生成」ボタンを押してください。")
-
-# --- 静止画 (Glow Style) ---
-static_glow_path = "static_network_glow.png"
-if os.path.exists(static_glow_path):
-    st.subheader("静止画 (Motionless) - Zoomable")
-    
-    import base64
-    with open(static_glow_path, "rb") as f:
-        img_data = base64.b64encode(f.read()).decode()
-    
-    html_code = f"""
-    <!DOCTYPE html>
-    <html>
-    <head>
-    <style>
-        body {{ margin: 0; overflow: hidden; background-color: #020617; display: flex; justify-content: center; align-items: center; height: 100vh; }}
-        #container {{
-            width: 100%;
-            height: 100%;
-            max-width: 750px;
-            aspect-ratio: 1 / 1;
-            overflow: hidden;
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            position: relative;
-        }}
-        img {{
-            transform-origin: 0 0;
-            width: 100%;
-            height: 100%;
-            object-fit: contain;
-            display: block;
-            pointer-events: none;
-        }}
-    </style>
-    </head>
-    <body>
-        <div id="container">
-            <img id="zoom-img" src="data:image/png;base64,{img_data}" />
-        </div>
-        <script>
-            const container = document.getElementById('container');
-            const img = document.getElementById('zoom-img');
-            
-            let scale = 1;
-            let pointX = 0;
-            let pointY = 0;
-
-            function updateTransform() {{
-                img.style.transform = `translate(${{pointX}}px, ${{pointY}}px) scale(${{scale}})`;
-            }}
-
-            container.addEventListener('wheel', (e) => {{
-                if (e.ctrlKey) {{
-                    e.preventDefault();
-                    
-                    const rect = container.getBoundingClientRect();
-                    const mx = e.clientX - rect.left;
-                    const my = e.clientY - rect.top;
-                    
-                    const xs = (mx - pointX) / scale;
-                    const ys = (my - pointY) / scale;
-                    
-                    const delta = -e.deltaY;
-                    const factor = delta > 0 ? 1.1 : 0.9;
-                    
-                    let nextScale = scale * factor;
-                    
-                    if (nextScale < 1) nextScale = 1;
-                    if (nextScale > 20) nextScale = 20;
-
-                    pointX = mx - xs * nextScale;
-                    pointY = my - ys * nextScale;
-                    
-                    if (nextScale === 1) {{
-                        pointX = 0;
-                        pointY = 0;
-                    }}
-
-                    scale = nextScale;
-                    updateTransform();
-                }}
-            }}, {{ passive: false }});
-        </script>
-    </body>
-    </html>
-    """
-    components.html(html_code, height=750)
-
-st.divider()
-
-# --- データフォーマット案内 ---
-st.subheader("📊 データフォーマット")
-st.write("CSVファイルは以下の形式である必要があります。")
-
-# Load current data to show as sample
-if os.path.exists("survey_data.csv"):
-    df = pd.read_csv("survey_data.csv")
-    st.dataframe(df)
-    
-    # Download button for current CSV
-    with open("survey_data.csv", "rb") as f:
-        st.download_button(
-            label="現在のCSVをダウンロード (サンプルとして利用可)",
-            data=f,
-            file_name="survey_data.csv",
-            mime="text/csv"
-        )
-else:
-    st.warning("データファイル (survey_data.csv) が見つかりません。")
-
-st.markdown("""
-### カラム説明
-- **Name**: 表示される名前 (英数字推奨)
-- **Q2**: 波紋の大きさ・勢い (数値 1-10推奨)
-- **Q4_Switch**: 色を決定するスイッチ (安心, 挑戦, 確信, 充足, 静観)
-- **Q5**: (内部計算用: リンクのつながりやすさ等)
-- **Q6_Gift**: (予備)
-""")
-
-
-
-
+            size = Math.min(window.innerWidth, window.innerHeight);
+            offsetX = (window.innerWidth - size) / 2;
+            offset
