@@ -9,7 +9,7 @@ import base64
 st.set_page_config(page_title="ファイブエムOS 可視化プロト", layout="wide")
 
 # --- タイトルと説明 ---
-st.title("🌌 ファイブエムOS 可視化プロト")
+st.title(" ファイブエムOS 可視化プロト")
 st.write("アンケート結果を『共鳴のエコー』として可視化します。")
 
 # --- サイドバー：データ管理 ---
@@ -22,37 +22,19 @@ if os.path.exists(json_path):
     with open(json_path, "r", encoding='utf-8') as f:
         tmp_data = json.load(f)
     
-    # カテゴリー名でのフィルター機能（CSVから紐付け）
-    if os.path.exists("survey_data.csv"):
-        df_sample = pd.read_csv("survey_data.csv")
-        if 'Q4_Switch' in df_sample.columns:
-            # gen_animation.py側の色割り当てロジックに対応（辞書作成）
-            # ノードデータから色を抽出し、カテゴリーと紐付け
-            categories = sorted(df_sample['Q4_Switch'].unique())
-            label_to_color = {}
-            
-            # カテゴリー名を表示し、対応する色コードを内部で保持
-            # ※animation_data側でカテゴリー情報が保持されている前提
-            for node in tmp_data['nodes']:
-                # ここでは簡易的に色を収集。必要に応じてマッピングを調整
-                color = node['color']
-                # カテゴリー名をキー、色を値として保持
-                # ※Q4_Switchの順序とgen_animationの色順が一致している必要があります
-                pass 
-
-            # 今回は「色」のリストをカテゴリー名として選択させる形式をベースに維持
-            all_colors = sorted(list(set([n['color'] for n in tmp_data['nodes']])))
-            st.sidebar.subheader("🎯 カテゴリー表示")
-            selected_labels = st.sidebar.multiselect(
-                "表示するカテゴリーの色を選択（空だと全表示）",
-                options=all_colors,
-                default=[]
-            )
-            selected_colors = selected_labels
+    # カテゴリー名（色）でのフィルター機能
+    all_colors = sorted(list(set([n['color'] for n in tmp_data['nodes']])))
+    st.sidebar.subheader(" カテゴリー表示")
+    selected_labels = st.sidebar.multiselect(
+        "表示するカテゴリーの色を選択（空だと全表示）",
+        options=all_colors,
+        default=[]
+    )
+    selected_colors = selected_labels
 
 st.sidebar.divider()
 
-if st.sidebar.button("🎥 アニメーションを生成/更新"):
+if st.sidebar.button(" アニメーションを生成/更新"):
     with st.spinner('更新中...'):
         try:
             import gen_animation
@@ -93,9 +75,7 @@ if os.path.exists(json_path):
         const LIMIT = 500; const RANGE = 1000;
         const DURATION_FRAMES = 8000; const RIPPLE_CYCLE = 640; 
         
-        // ページ読み込み時の「絶対時間」を基準にする（フィルター操作でリセットされない）
-        // ただし、iframeが再読み込みされる場合はDate.now()を使い
-        // ブラウザのセッションストレージ等で時間を維持する工夫を入れます
+        // フィルター操作でリセットされないためのセッション管理
         if (!window.sessionStorage.getItem('animStartTime')) {{
             window.sessionStorage.setItem('animStartTime', Date.now());
         }}
@@ -125,12 +105,14 @@ if os.path.exists(json_path):
         const mapY = (y) => offsetY + size * (1 - (y + LIMIT) / RANGE);
 
         function loop() {{
-            const elapsed = (Date.now() - startTime) / 50; 
+            const now = Date.now();
+            const elapsed = (now - startTime) / 50; 
             
             ctx.clearRect(0, 0, canvas.width, canvas.height);
             ctx.imageSmoothingEnabled = false; 
             
-            // 背景（瞬きなし）
+            // 背景（瞬きなし、不透明度固定）
+            ctx.globalAlpha = 1.0;
             ctx.drawImage(bgImage, 0, 0, window.innerWidth, window.innerHeight);
             
             // 線の描画
@@ -154,10 +136,12 @@ if os.path.exists(json_path):
                 if (elapsed >= n.delay) {{
                     const isSelected = activeColors.length === 0 || activeColors.includes(n.color);
                     const baseAlpha = Math.min(1.0, (elapsed - n.delay) / 120);
-                    // 非選択のものは透明度を極限まで下げる
+                    
+                    // 非選択項目は透明度0.1でうっすら表示
                     const alpha = isSelected ? baseAlpha : baseAlpha * 0.1;
                     const x = mapX(n.x); const y = mapY(n.y);
                     
+                    // --- 波紋の描画 (太さ3.0、濃度1.2) ---
                     if (isSelected) {{
                         const relFrame = (elapsed - n.delay) % RIPPLE_CYCLE;
                         const progress = relFrame / RIPPLE_CYCLE;
@@ -171,21 +155,26 @@ if os.path.exists(json_path):
                         ctx.globalAlpha = 1.0;
                     }}
 
-                    // 二重グロウ効果
+                    // --- 二重の白円グロウ効果 (デザイン復元) ---
+                    // 外側の大きな円 (不透明度 0.075)
                     ctx.beginPath();
                     ctx.arc(x, y, (80/RANGE * size / 2), 0, Math.PI*2);
-                    ctx.fillStyle = "rgba(255, 255, 255, " + (alpha * 0.2) + ")";
-                    ctx.fill();
-                    ctx.beginPath();
-                    ctx.arc(x, y, (40/RANGE * size / 2 * 0.7), 0, Math.PI*2);
                     ctx.fillStyle = "rgba(255, 255, 255, " + (alpha * 0.075) + ")";
                     ctx.fill();
                     
+                    // 内側の円 (不透明度 0.2)
+                    ctx.beginPath();
+                    ctx.arc(x, y, (40/RANGE * size / 2 * 0.7), 0, Math.PI*2);
+                    ctx.fillStyle = "rgba(255, 255, 255, " + (alpha * 0.2) + ")";
+                    ctx.fill();
+                    
+                    // 中心点
                     ctx.beginPath();
                     ctx.arc(x, y, 3, 0, Math.PI*2); 
                     ctx.fillStyle = "rgba(255, 255, 255, " + (alpha * 0.9) + ")";
                     ctx.fill();
                     
+                    // 名前 (サイズ 9px)
                     ctx.fillStyle = "rgba(255, 255, 255, " + (alpha * 0.7) + ")";
                     ctx.font = 'bold 9px sans-serif'; 
                     ctx.fillText(n.name, x + 8, y - 5);
