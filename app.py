@@ -125,7 +125,6 @@ if os.path.exists(json_path):
                     const progress = relFrame / RIPPLE_CYCLE;
                     const rPx = (progress * (n.score * 4.5) / RANGE) * size;
                     
-                    // --- 波紋の描画 (太さを3.0に変更) ---
                     if (progress < 1.0) {{
                         ctx.beginPath();
                         ctx.arc(x, y, rPx, 0, Math.PI * 2);
@@ -136,26 +135,24 @@ if os.path.exists(json_path):
                         ctx.globalAlpha = 1.0;
                     }}
 
-                    // --- 二重の白円グロウ効果 (復活) ---
-                    // 外側の大きな薄い円
+                    // --- 二重の白円グロウ効果 (透明度を下げて濃く修正) ---
+                    // 外側の大きな円 (0.05 -> 0.10)
                     ctx.beginPath();
                     ctx.arc(x, y, (80/RANGE * size / 2), 0, Math.PI*2);
-                    ctx.fillStyle = "rgba(255, 255, 255, " + (alpha * 0.05) + ")";
+                    ctx.fillStyle = "rgba(255, 255, 255, " + (alpha * 0.1) + ")";
                     ctx.fill();
                     
-                    // 内側の少し濃い円
+                    // 内側の円 (0.15 -> 0.30)
                     ctx.beginPath();
                     ctx.arc(x, y, (40/RANGE * size / 2 * 0.7), 0, Math.PI*2);
-                    ctx.fillStyle = "rgba(255, 255, 255, " + (alpha * 0.15) + ")";
+                    ctx.fillStyle = "rgba(255, 255, 255, " + (alpha * 0.3) + ")";
                     ctx.fill();
                     
-                    // --- 中心の点 ---
                     ctx.beginPath();
                     ctx.arc(x, y, 3, 0, Math.PI*2); 
                     ctx.fillStyle = "rgba(255, 255, 255, " + (alpha * 0.9) + ")";
                     ctx.fill();
                     
-                    // --- 名前 (サイズを9pxに変更) ---
                     ctx.fillStyle = "rgba(255, 255, 255, " + (alpha * 0.7) + ")";
                     ctx.font = 'bold 9px sans-serif'; 
                     ctx.fillText(n.name, x + 8, y - 5);
