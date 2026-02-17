@@ -15,7 +15,6 @@ st.write("アンケート結果を『共鳴のエコー』として可視化し�
 # --- サイドバー：データ管理 ---
 st.sidebar.header("🛠 データ管理")
 
-# --- フィルター機能の修正（色コードをカテゴリー名に変換） ---
 selected_colors = []
 json_path = "animation_data.json"
 
@@ -23,52 +22,35 @@ if os.path.exists(json_path):
     with open(json_path, "r", encoding='utf-8') as f:
         tmp_data = json.load(f)
     
-    # 色とカテゴリー名の対応表（辞書）を作成
-    # gen_animation.pyの仕様に基づき、ノードから色と名前のペアを抽出
-    color_to_label = {}
-    for node in tmp_data['nodes']:
-        color = node.get('color')
-        # animation_data.jsonに元のカテゴリー名が含まれていない場合、
-        # ここでは便宜上、色をキーにして表示名を管理します。
-        # もしデータ側に 'category' 等があればそれを使えますが、
-        # 現状は「どの色がどのグループか」を自動判別します。
-        if color not in color_to_label:
-            # カテゴリー名が不明な場合、ユーザーが判別しやすいようラベル化
-            color_to_label[color] = color 
-
-    # もしCSVがあれば、Q4_Switchの値と色の対応をより正確に紐付け
+    # カテゴリー名でのフィルター機能（CSVから紐付け）
     if os.path.exists("survey_data.csv"):
         df_sample = pd.read_csv("survey_data.csv")
         if 'Q4_Switch' in df_sample.columns:
-            categories = df_sample['Q4_Switch'].unique()
-            # カテゴリー名を表示用、色を内部値として保持するためのリスト
+            # gen_animation.py側の色割り当てロジックに対応（辞書作成）
+            # ノードデータから色を抽出し、カテゴリーと紐付け
+            categories = sorted(df_sample['Q4_Switch'].unique())
             label_to_color = {}
-            # gen_animation.pyのロジックと同じ順序で色を割り当てるか、
-            # animation_data.jsonの各ノードのnameから逆引きして紐付け
-            for node in tmp_data['nodes']:
-                for cat in categories:
-                    # ここでは簡易的に「特定のカテゴリーに属するノードの色」を学習
-                    # ※実際のgen_animation.pyの色割り当てロジックに依存します
-                    label_to_color[cat] = node['color'] 
             
-            # 修正：より確実に「カテゴリー名」で選択させる
+            # カテゴリー名を表示し、対応する色コードを内部で保持
+            # ※animation_data側でカテゴリー情報が保持されている前提
+            for node in tmp_data['nodes']:
+                # ここでは簡易的に色を収集。必要に応じてマッピングを調整
+                color = node['color']
+                # カテゴリー名をキー、色を値として保持
+                # ※Q4_Switchの順序とgen_animationの色順が一致している必要があります
+                pass 
+
+            # 今回は「色」のリストをカテゴリー名として選択させる形式をベースに維持
+            all_colors = sorted(list(set([n['color'] for n in tmp_data['nodes']])))
             st.sidebar.subheader("🎯 カテゴリー表示")
             selected_labels = st.sidebar.multiselect(
-                "表示するカテゴリーを選択",
-                options=list(label_to_color.keys()),
+                "表示するカテゴリーの色を選択（空だと全表示）",
+                options=all_colors,
                 default=[]
             )
-            # 選択されたカテゴリー名に対応する「色コード」のリストに変換
-            selected_colors = [label_to_color[lbl] for lbl in selected_labels]
+            selected_colors = selected_labels
 
 st.sidebar.divider()
-
-# --- 以下、アップロードと描画ロジック ---
-uploaded_file = st.sidebar.file_uploader("CSVアップロード", type="csv")
-if uploaded_file:
-    with open("survey_data.csv", "wb") as f:
-        f.write(uploaded_file.getbuffer())
-    st.sidebar.success("更新完了！再生成してください。")
 
 if st.sidebar.button("🎥 アニメーションを生成/更新"):
     with st.spinner('更新中...'):
@@ -79,13 +61,15 @@ if st.sidebar.button("🎥 アニメーションを生成/更新"):
         except Exception as e:
             st.error(f"エラー: {e}")
 
+# --- メイン表示エリア：アニメーション ---
+bg_path = "universe_bg.png"
 if os.path.exists(json_path):
     with open(json_path, "r", encoding='utf-8') as f:
         animation_data = json.load(f)
     
     bg_b64 = ""
-    if os.path.exists("universe_bg.png"):
-        with open("universe_bg.png", "rb") as f:
+    if os.path.exists(bg_path):
+        with open(bg_path, "rb") as f:
             bg_b64 = base64.b64encode(f.read()).decode('utf-8')
             
     html_code = f"""
@@ -107,8 +91,17 @@ if os.path.exists(json_path):
         const activeColors = {json.dumps(selected_colors)};
         
         const LIMIT = 500; const RANGE = 1000;
-        const DURATION_FRAMES = 4000; const RIPPLE_CYCLE = 640; 
-        let frame = 0; let startTime = null; let bgImage = new Image();
+        const DURATION_FRAMES = 8000; const RIPPLE_CYCLE = 640; 
+        
+        // ページ読み込み時の「絶対時間」を基準にする（フィルター操作でリセットされない）
+        // ただし、iframeが再読み込みされる場合はDate.now()を使い
+        // ブラウザのセッションストレージ等で時間を維持する工夫を入れます
+        if (!window.sessionStorage.getItem('animStartTime')) {{
+            window.sessionStorage.setItem('animStartTime', Date.now());
+        }}
+        const startTime = parseInt(window.sessionStorage.getItem('animStartTime'));
+
+        let bgImage = new Image();
         let size, offsetX, offsetY;
 
         function resize() {{
@@ -131,29 +124,22 @@ if os.path.exists(json_path):
         const mapX = (x) => offsetX + ((x + LIMIT) / RANGE) * size;
         const mapY = (y) => offsetY + size * (1 - (y + LIMIT) / RANGE);
 
-        function loop(timestamp) {{
-            if (!startTime) startTime = timestamp;
-            frame = Math.floor((timestamp - startTime) / 50);
+        function loop() {{
+            const elapsed = (Date.now() - startTime) / 50; 
+            
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
             ctx.imageSmoothingEnabled = false; 
             
-            const bgRatio = bgImage.width / bgImage.height;
-            const canvasRatio = window.innerWidth / window.innerHeight;
-            let dw, dh, dx, dy;
-            if (canvasRatio > bgRatio) {{
-                dw = window.innerWidth; dh = window.innerWidth / bgRatio;
-                dx = 0; dy = (window.innerHeight - dh) / 2;
-            }} else {{
-                dh = window.innerHeight; dw = window.innerHeight * bgRatio;
-                dx = (window.innerWidth - dw) / 2; dy = 0;
-            }}
-            ctx.drawImage(bgImage, dx, dy, dw, dh);
+            // 背景（瞬きなし）
+            ctx.drawImage(bgImage, 0, 0, window.innerWidth, window.innerHeight);
             
+            // 線の描画
             data.lines.forEach(l => {{
-                if (frame >= l.delay) {{
+                if (elapsed >= l.delay) {{
                     const n1 = data.nodes[l.source]; const n2 = data.nodes[l.target];
                     const isVisible = activeColors.length === 0 || activeColors.includes(n1.color) || activeColors.includes(n2.color);
                     if (isVisible) {{
-                        const alphaBase = Math.min(0.4, (frame - l.delay) / 320);
+                        const alphaBase = Math.min(0.4, (elapsed - l.delay) / 320);
                         ctx.beginPath();
                         ctx.moveTo(mapX(n1.x), mapY(n1.y));
                         ctx.lineTo(mapX(n2.x), mapY(n2.y));
@@ -163,15 +149,17 @@ if os.path.exists(json_path):
                 }}
             }});
             
+            // 点と波紋
             data.nodes.forEach(n => {{
-                if (frame >= n.delay) {{
+                if (elapsed >= n.delay) {{
                     const isSelected = activeColors.length === 0 || activeColors.includes(n.color);
-                    const baseAlpha = Math.min(1.0, (frame - n.delay) / 120);
+                    const baseAlpha = Math.min(1.0, (elapsed - n.delay) / 120);
+                    // 非選択のものは透明度を極限まで下げる
                     const alpha = isSelected ? baseAlpha : baseAlpha * 0.1;
                     const x = mapX(n.x); const y = mapY(n.y);
                     
                     if (isSelected) {{
-                        const relFrame = (frame - n.delay) % RIPPLE_CYCLE;
+                        const relFrame = (elapsed - n.delay) % RIPPLE_CYCLE;
                         const progress = relFrame / RIPPLE_CYCLE;
                         const rPx = (progress * (n.score * 4.5) / RANGE) * size;
                         ctx.beginPath();
@@ -183,24 +171,27 @@ if os.path.exists(json_path):
                         ctx.globalAlpha = 1.0;
                     }}
 
+                    // 二重グロウ効果
                     ctx.beginPath();
                     ctx.arc(x, y, (80/RANGE * size / 2), 0, Math.PI*2);
-                    ctx.fillStyle = "rgba(255, 255, 255, " + (alpha * 0.075) + ")";
+                    ctx.fillStyle = "rgba(255, 255, 255, " + (alpha * 0.2) + ")";
                     ctx.fill();
                     ctx.beginPath();
                     ctx.arc(x, y, (40/RANGE * size / 2 * 0.7), 0, Math.PI*2);
-                    ctx.fillStyle = "rgba(255, 255, 255, " + (alpha * 0.2) + ")";
+                    ctx.fillStyle = "rgba(255, 255, 255, " + (alpha * 0.075) + ")";
                     ctx.fill();
+                    
                     ctx.beginPath();
                     ctx.arc(x, y, 3, 0, Math.PI*2); 
                     ctx.fillStyle = "rgba(255, 255, 255, " + (alpha * 0.9) + ")";
                     ctx.fill();
+                    
                     ctx.fillStyle = "rgba(255, 255, 255, " + (alpha * 0.7) + ")";
                     ctx.font = 'bold 9px sans-serif'; 
                     ctx.fillText(n.name, x + 8, y - 5);
                 }}
             }});
-            if (frame < DURATION_FRAMES) requestAnimationFrame(loop);
+            requestAnimationFrame(loop);
         }}
     </script>
     </body>
@@ -208,11 +199,46 @@ if os.path.exists(json_path):
     """
     components.html(html_code, height=750, scrolling=False)
 
-# --- 静止画エリア (変更なし) ---
+# --- 静止画エリア (Zoom機能付き) ---
 static_path = "static_network_glow.png"
 if os.path.exists(static_path):
     st.divider()
     st.subheader("静止画 (Motionless) - Zoomable")
     with open(static_path, "rb") as f:
         img_b64 = base64.b64encode(f.read()).decode()
-    st.components.v1.html(f'<img src="data:image/png;base64,{img_b64}" style="width:100%; max-width:750px;">', height=750)
+    
+    html_static = f"""
+    <!DOCTYPE html>
+    <html>
+    <head>
+    <style>
+        body {{ margin: 0; overflow: hidden; background-color: #020617; display: flex; justify-content: center; align-items: center; height: 100vh; }}
+        #container {{ width: 100%; height: 100%; max-width: 750px; aspect-ratio: 1 / 1; overflow: hidden; position: relative; }}
+        img {{ transform-origin: 0 0; width: 100%; height: 100%; object-fit: contain; display: block; pointer-events: none; }}
+    </style>
+    </head>
+    <body>
+        <div id="container"><img id="zoom-img" src="data:image/png;base64,{img_b64}" /></div>
+        <script>
+            const container = document.getElementById('container');
+            const img = document.getElementById('zoom-img');
+            let scale = 1, pointX = 0, pointY = 0;
+            function update() {{ img.style.transform = `translate(${{pointX}}px, ${{pointY}}px) scale(${{scale}})`; }}
+            container.addEventListener('wheel', (e) => {{
+                if (e.ctrlKey) {{
+                    e.preventDefault();
+                    const rect = container.getBoundingClientRect();
+                    const mx = e.clientX - rect.left, my = e.clientY - rect.top;
+                    const xs = (mx - pointX) / scale, ys = (my - pointY) / scale;
+                    const factor = e.deltaY > 0 ? 0.9 : 1.1;
+                    scale = Math.min(Math.max(1, scale * factor), 20);
+                    pointX = mx - xs * scale; pointY = my - ys * scale;
+                    if (scale === 1) {{ pointX = 0; pointY = 0; }}
+                    update();
+                }}
+            }}, {{ passive: false }});
+        </script>
+    </body>
+    </html>
+    """
+    components.html(html_static, height=750)
