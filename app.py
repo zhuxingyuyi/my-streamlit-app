@@ -22,31 +22,31 @@ if uploaded_file is not None:
         f.write(uploaded_file.getbuffer())
     st.sidebar.success("データが保存されました！")
 
-# 🔄 データを強制的に再生成するボタン（キャッシュ問題を解決）
+# 🔄 メモリとキャッシュを強制リセットして再生成する
 if st.sidebar.button("🎥 アニメーションを生成/更新"):
     with st.spinner('最新データを解析中...'):
         try:
-            # 1. 既存のモジュールをメモリから削除して強制再実行
+            # メモリ上のモジュールを削除して強制再実行
             if "gen_animation" in sys.modules:
                 del sys.modules["gen_animation"]
             
             import gen_animation
             importlib.reload(gen_animation)
             
-            # 2. キャッシュをクリア
+            # キャッシュをクリア
             st.cache_data.clear()
             st.sidebar.success("更新完了！")
             st.rerun() 
         except Exception as e:
-            st.sidebar.error(f"エラー: {e}")
+            st.sidebar.error(f"解析エラー: {e}")
 
 # --- データの準備 ---
 json_path = "animation_data.json"
 bg_path = "universe_bg.png"
-animation_data_json = "{}" # 初期値
+animation_data_json = "{}" 
 bg_b64 = ""
 
-# ファイルの存在を確認してから読み込む（TypeError回避のガード）
+# エラー回避のためのガード付き読み込み
 if os.path.exists(json_path):
     try:
         with open(json_path, "r", encoding='utf-8') as f:
@@ -55,12 +55,14 @@ if os.path.exists(json_path):
         # CSVからギフトメッセージを紐付け
         if os.path.exists("survey_data.csv"):
             df_csv = pd.read_csv("survey_data.csv")
-            gift_map = pd.Series(df_csv.Q6_Gift.values, index=df_csv.Name).to_dict()
-            for node in anim_data['nodes']:
-                node['gift'] = str(gift_map.get(node['name'], ""))
+            # カラム名が正しいか確認してマップを作成
+            if 'Q6_Gift' in df_csv.columns and 'Name' in df_csv.columns:
+                gift_map = pd.Series(df_csv.Q6_Gift.values, index=df_csv.Name).to_dict()
+                for node in anim_data.get('nodes', []):
+                    node['gift'] = str(gift_map.get(node['name'], ""))
         
         animation_data_json = json.dumps(anim_data)
-    except Exception:
+    except:
         animation_data_json = "{}"
 
 if os.path.exists(bg_path):
@@ -121,14 +123,14 @@ if animation_data_json != "{}":
         }}
     </script></body></html>
     """
-    components.html(html_standard, height=620, key="std_comp")
+    components.html(html_standard, height=620, key="std_display")
 
 # --- 2. インタラクティブ・分析 ---
 st.divider()
 st.subheader("🔍 インタラクティブ・分析")
 
 if animation_data_json != "{}":
-    all_colors = sorted(list(set([n['color'] for n in anim_data['nodes']])))
+    all_colors = sorted(list(set([n['color'] for n in anim_data.get('nodes', [])])))
     selected_colors = st.multiselect("カテゴリーフィルター", options=all_colors, default=[])
 
     html_interactive = f"""
@@ -219,8 +221,8 @@ if animation_data_json != "{}":
                     ctx.beginPath(); ctx.arc(x, y, 3, 0, Math.PI*2); ctx.fillStyle = "rgba(255,255,255,"+(a*0.9)+")"; ctx.fill();
                     ctx.fillStyle = "rgba(255,255,255,"+(a*0.7)+")"; ctx.font = `bold ${{9/scale}}px sans-serif`; ctx.fillText(n.name, x+8/scale, y-5/scale);
 
-                    // --- ポップアップデザイン修正 (下線 + 点への引き出し線) ---
-                    if (selectedNode === n && n.gift) {{
+                    // --- ポップアップデザイン (下線 + 点への引き出し線) ---
+                    if (selectedNode === n && n.gift && n.gift !== "None") {{
                         const txt = n.gift; 
                         ctx.font = `bold ${{10/scale}}px sans-serif`;
                         const tw = ctx.measureText(txt).width;
@@ -233,11 +235,11 @@ if animation_data_json != "{}":
                         ctx.strokeStyle = "rgba(255, 255, 255, 0.7)"; 
                         ctx.lineWidth = 1/scale; ctx.stroke();
                         
-                        // 2. テキスト表示
+                        // 2. テキスト
                         ctx.fillStyle = "white"; ctx.textAlign = "left"; 
                         ctx.fillText(txt, bx, by);
                         
-                        // 3. アンダーライン
+                        // 3. 下線
                         ctx.beginPath(); ctx.moveTo(bx, by + 2/scale); ctx.lineTo(bx + tw, by + 2/scale);
                         ctx.strokeStyle = "rgba(255, 255, 255, 0.9)"; ctx.lineWidth = 1/scale; ctx.stroke();
                         ctx.textAlign = "left";
@@ -248,13 +250,10 @@ if animation_data_json != "{}":
         }}
     </script></body></html>
     """
-    components.html(html_interactive, height=720, key="int_comp")
+    components.html(html_interactive, height=720, key="interactive_display")
 
 # --- 3. データテーブル ---
 st.divider()
 st.subheader("📊 アンケート元データ")
 if os.path.exists("survey_data.csv"):
-    df = pd.read_csv("survey_data.csv")
-    st.dataframe(df, use_container_width=True)
-else:
-    st.info("データがアップロードされていません。")
+    st.dataframe(pd.read_csv("survey_data.csv"), use_container_width=True)
