@@ -18,56 +18,57 @@ st.sidebar.header("🛠 データ管理")
 
 uploaded_file = st.sidebar.file_uploader("新しいデータをアップロード (CSV)", type="csv")
 if uploaded_file is not None:
-    # ファイルを保存
     with open("survey_data.csv", "wb") as f:
         f.write(uploaded_file.getbuffer())
     st.sidebar.success("データが保存されました！")
 
-# 🔄 【最重要】データを強制的に再解析して、アニメーションを「作り直す」処理
+# 🔄 データを強制的に再生成するボタン（キャッシュ問題を解決）
 if st.sidebar.button("🎥 アニメーションを生成/更新"):
-    with st.spinner('最新データを解析して再生成中...'):
+    with st.spinner('最新データを解析中...'):
         try:
-            # メモリ上のモジュールキャッシュを削除して、確実に最新のCSVを読ませる
+            # 1. 既存のモジュールをメモリから削除して強制再実行
             if "gen_animation" in sys.modules:
                 del sys.modules["gen_animation"]
             
             import gen_animation
             importlib.reload(gen_animation)
             
-            # Streamlit自体のキャッシュもクリア
+            # 2. キャッシュをクリア
             st.cache_data.clear()
-            st.sidebar.success("最新データに更新完了！")
+            st.sidebar.success("更新完了！")
             st.rerun() 
         except Exception as e:
-            st.sidebar.error(f"再生成エラー: {e}")
+            st.sidebar.error(f"エラー: {e}")
 
 # --- データの準備 ---
 json_path = "animation_data.json"
 bg_path = "universe_bg.png"
-animation_data_json = "{}"
+animation_data_json = "{}" # 初期値
 bg_b64 = ""
 
-# ファイルが存在する場合のみ読み込みを実行
+# ファイルの存在を確認してから読み込む（TypeError回避のガード）
 if os.path.exists(json_path):
-    with open(json_path, "r", encoding='utf-8') as f:
-        anim_data = json.load(f)
-    
-    # CSVからメッセージ(Q6_Gift)を紐付け
-    if os.path.exists("survey_data.csv"):
-        df_csv = pd.read_csv("survey_data.csv")
-        gift_map = pd.Series(df_csv.Q6_Gift.values, index=df_csv.Name).to_dict()
-        for node in anim_data['nodes']:
-            node['gift'] = str(gift_map.get(node['name'], ""))
-    
-    # JSON文字列に変換（エラー回避のため、空でないことを確認）
-    animation_data_json = json.dumps(anim_data)
+    try:
+        with open(json_path, "r", encoding='utf-8') as f:
+            anim_data = json.load(f)
+        
+        # CSVからギフトメッセージを紐付け
+        if os.path.exists("survey_data.csv"):
+            df_csv = pd.read_csv("survey_data.csv")
+            gift_map = pd.Series(df_csv.Q6_Gift.values, index=df_csv.Name).to_dict()
+            for node in anim_data['nodes']:
+                node['gift'] = str(gift_map.get(node['name'], ""))
+        
+        animation_data_json = json.dumps(anim_data)
+    except Exception:
+        animation_data_json = "{}"
 
 if os.path.exists(bg_path):
     with open(bg_path, "rb") as f:
         bg_b64 = base64.b64encode(f.read()).decode('utf-8')
 
 # --- 1. スタンダード・アニメーション ---
-if os.path.exists(json_path) and animation_data_json != "{}":
+if animation_data_json != "{}":
     st.subheader("📺 スタンダード・アニメーション")
     html_standard = f"""
     <!DOCTYPE html><html><head><style>
@@ -108,10 +109,8 @@ if os.path.exists(json_path) and animation_data_json != "{}":
                     const a = Math.min(1.0, (elapsed - n.delay) / 120);
                     const x = 100+((n.x+500)/1000)*600, y = 600*(1-(n.y+500)/1000);
                     const p = ((elapsed - n.delay) % 640) / 640;
-                    // 波紋：太さ3.0、濃度高め
                     ctx.beginPath(); ctx.arc(x, y, (p*(n.score*4.5)/1000)*600, 0, Math.PI*2);
                     ctx.strokeStyle = n.color; ctx.lineWidth = 3; ctx.globalAlpha = Math.max(0, 1.2*(1-p)); ctx.stroke(); ctx.globalAlpha = 1;
-                    // グロウ：指定の透明度
                     ctx.beginPath(); ctx.arc(x, y, 24, 0, Math.PI*2); ctx.fillStyle = "rgba(255,255,255,"+(a*0.075)+")"; ctx.fill();
                     ctx.beginPath(); ctx.arc(x, y, 8, 0, Math.PI*2); ctx.fillStyle = "rgba(255,255,255,"+(a*0.2)+")"; ctx.fill();
                     ctx.beginPath(); ctx.arc(x, y, 3, 0, Math.PI*2); ctx.fillStyle = "rgba(255,255,255,"+(a*0.9)+")"; ctx.fill();
@@ -122,17 +121,15 @@ if os.path.exists(json_path) and animation_data_json != "{}":
         }}
     </script></body></html>
     """
-    # TypeError回避のため、keyをシンプルな固定文字列に変更
-    components.html(html_standard, height=620, key="std_animation_comp")
+    components.html(html_standard, height=620, key="std_comp")
 
 # --- 2. インタラクティブ・分析 ---
 st.divider()
 st.subheader("🔍 インタラクティブ・分析")
 
-if os.path.exists(json_path) and animation_data_json != "{}":
-    # 色コードでのフィルター（現状を維持）
+if animation_data_json != "{}":
     all_colors = sorted(list(set([n['color'] for n in anim_data['nodes']])))
-    selected_colors = st.multiselect("表示する色のカテゴリーを選択", options=all_colors, default=[])
+    selected_colors = st.multiselect("カテゴリーフィルター", options=all_colors, default=[])
 
     html_interactive = f"""
     <!DOCTYPE html><html><head><style>
@@ -222,7 +219,7 @@ if os.path.exists(json_path) and animation_data_json != "{}":
                     ctx.beginPath(); ctx.arc(x, y, 3, 0, Math.PI*2); ctx.fillStyle = "rgba(255,255,255,"+(a*0.9)+")"; ctx.fill();
                     ctx.fillStyle = "rgba(255,255,255,"+(a*0.7)+")"; ctx.font = `bold ${{9/scale}}px sans-serif`; ctx.fillText(n.name, x+8/scale, y-5/scale);
 
-                    // --- ポップアップデザイン修正 (下線 + 斜め引き出し線) ---
+                    // --- ポップアップデザイン修正 (下線 + 点への引き出し線) ---
                     if (selectedNode === n && n.gift) {{
                         const txt = n.gift; 
                         ctx.font = `bold ${{10/scale}}px sans-serif`;
@@ -240,7 +237,7 @@ if os.path.exists(json_path) and animation_data_json != "{}":
                         ctx.fillStyle = "white"; ctx.textAlign = "left"; 
                         ctx.fillText(txt, bx, by);
                         
-                        // 3. アンダーライン (下辺のみ)
+                        // 3. アンダーライン
                         ctx.beginPath(); ctx.moveTo(bx, by + 2/scale); ctx.lineTo(bx + tw, by + 2/scale);
                         ctx.strokeStyle = "rgba(255, 255, 255, 0.9)"; ctx.lineWidth = 1/scale; ctx.stroke();
                         ctx.textAlign = "left";
@@ -251,8 +248,7 @@ if os.path.exists(json_path) and animation_data_json != "{}":
         }}
     </script></body></html>
     """
-    # TypeError回避のため、keyをシンプルなものに固定
-    components.html(html_interactive, height=720, key="int_animation_comp")
+    components.html(html_interactive, height=720, key="int_comp")
 
 # --- 3. データテーブル ---
 st.divider()
@@ -260,3 +256,5 @@ st.subheader("📊 アンケート元データ")
 if os.path.exists("survey_data.csv"):
     df = pd.read_csv("survey_data.csv")
     st.dataframe(df, use_container_width=True)
+else:
+    st.info("データがアップロードされていません。")
