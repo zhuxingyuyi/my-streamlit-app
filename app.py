@@ -4,16 +4,16 @@ import pandas as pd
 import os
 import json
 import base64
+import importlib 
 
 # ページ設定
 st.set_page_config(page_title="ファイブエムOS 可視化プロト", layout="wide")
 
-# --- タイトルと説明 ---
-st.title("ファイブエムOS 可視化プロト")
-st.write("アンケート結果を『シンクロニシティの波紋ー』として可視化します。")
+# --- タイトル ---
+st.title("🌌 ファイブエムOS 可視化プロト")
 
 # --- サイドバー：データ管理 ---
-st.sidebar.header("データ管理")
+st.sidebar.header("🛠 データ管理")
 
 uploaded_file = st.sidebar.file_uploader("新しいデータをアップロード (CSV)", type="csv")
 if uploaded_file is not None:
@@ -21,11 +21,12 @@ if uploaded_file is not None:
         f.write(uploaded_file.getbuffer())
     st.sidebar.success("データが保存されました！")
 
-if st.sidebar.button("アニメーションを生成/更新"):
+if st.sidebar.button("🎥 アニメーションを生成/更新"):
     with st.spinner('データを解析中...'):
         try:
             import gen_animation
-            st.success("更新完了！")
+            importlib.reload(gen_animation) 
+            st.sidebar.success("最新データで更新完了！")
             st.rerun() 
         except Exception as e:
             st.error(f"実行エラー: {e}")
@@ -39,13 +40,11 @@ bg_b64 = ""
 if os.path.exists(json_path):
     with open(json_path, "r", encoding='utf-8') as f:
         anim_data = json.load(f)
-    
     if os.path.exists("survey_data.csv"):
         df_csv = pd.read_csv("survey_data.csv")
         gift_map = pd.Series(df_csv.Q6_Gift.values, index=df_csv.Name).to_dict()
         for node in anim_data['nodes']:
             node['gift'] = gift_map.get(node['name'], "メッセージはありません")
-    
     animation_data_json = json.dumps(anim_data)
 
 if os.path.exists(bg_path):
@@ -54,7 +53,7 @@ if os.path.exists(bg_path):
 
 # --- 1. スタンダード・アニメーション ---
 if os.path.exists(json_path):
-    st.subheader("スタンダード・マップ")
+    st.subheader("📺 スタンダード・アニメーション")
     html_standard = f"""
     <!DOCTYPE html><html><head><style>
         body {{ margin: 0; background-color: #020617; overflow: hidden; display: flex; justify-content: center; align-items: center; height: 600px; }}
@@ -76,7 +75,6 @@ if os.path.exists(json_path):
         resize();
         bgImage.src = bgData;
         bgImage.onload = () => requestAnimationFrame(loop);
-
         function loop() {{
             const elapsed = (Date.now() - startTime) / 50;
             ctx.clearRect(0,0,800,600);
@@ -85,8 +83,7 @@ if os.path.exists(json_path):
                 if (elapsed >= l.delay) {{
                     const n1 = data.nodes[l.source], n2 = data.nodes[l.target];
                     const a = Math.min(0.4, (elapsed - l.delay) / 320);
-                    ctx.beginPath();
-                    ctx.moveTo(100+((n1.x+500)/1000)*600, 600*(1-(n1.y+500)/1000));
+                    ctx.beginPath(); ctx.moveTo(100+((n1.x+500)/1000)*600, 600*(1-(n1.y+500)/1000));
                     ctx.lineTo(100+((n2.x+500)/1000)*600, 600*(1-(n2.y+500)/1000));
                     ctx.strokeStyle = "rgba(255, 255, 255, "+a+")"; ctx.lineWidth = 1; ctx.stroke();
                 }}
@@ -112,11 +109,11 @@ if os.path.exists(json_path):
 
 # --- 2. インタラクティブ・分析 ---
 st.divider()
-st.subheader("インタラクティブ・マップ")
+st.subheader("🔍 インタラクティブ・分析")
 
 if os.path.exists(json_path):
     all_colors = sorted(list(set([n['color'] for n in anim_data['nodes']])))
-    selected_colors = st.multiselect("表示する色のカテゴリーを選択", options=all_colors, default=[])
+    selected_colors = st.multiselect("カテゴリーフィルター", options=all_colors, default=[])
 
     html_interactive = f"""
     <!DOCTYPE html><html><head><style>
@@ -207,33 +204,15 @@ if os.path.exists(json_path):
                     ctx.fillStyle = "rgba(255,255,255,"+(a*0.7)+")"; ctx.font = `bold ${{9/scale}}px sans-serif`; ctx.fillText(n.name, x+8/scale, y-5/scale);
 
                     if (selectedNode === n) {{
-                        const txt = n.gift; 
-                        ctx.font = `bold ${{10/scale}}px sans-serif`;
+                        const txt = n.gift; ctx.font = `bold ${{10/scale}}px sans-serif`;
                         const tw = ctx.measureText(txt).width;
                         const bx = x - tw - 15/scale, by = y - 15/scale;
-                        
-                        // 1. 引き出し線（点からアンダーラインの右端へ）
-                        ctx.beginPath(); 
-                        ctx.moveTo(x - 4/scale, y - 4/scale); 
-                        ctx.lineTo(bx + tw, by + 2/scale);
-                        ctx.strokeStyle = "rgba(255, 255, 255, 0.7)"; 
-                        ctx.lineWidth = 1/scale; 
-                        ctx.stroke();
-                        
-                        // 2. テキスト表示（左上配置）
-                        ctx.fillStyle = "white";
-                        ctx.textAlign = "right"; 
-                        ctx.fillText(txt, bx + tw, by);
-                        
-                        // 3. アンダーライン（下辺のみ）
-                        ctx.beginPath();
-                        ctx.moveTo(bx, by + 2/scale);
-                        ctx.lineTo(bx + tw, by + 2/scale);
-                        ctx.strokeStyle = "rgba(255, 255, 255, 0.9)";
-                        ctx.lineWidth = 1/scale;
-                        ctx.stroke();
-                        
-                        ctx.textAlign = "left"; // リセット
+                        ctx.beginPath(); ctx.moveTo(x - 4/scale, y - 4/scale); ctx.lineTo(bx + tw, by + 2/scale);
+                        ctx.strokeStyle = "rgba(255, 255, 255, 0.7)"; ctx.lineWidth = 1/scale; ctx.stroke();
+                        ctx.fillStyle = "white"; ctx.textAlign = "right"; ctx.fillText(txt, bx + tw, by);
+                        ctx.beginPath(); ctx.moveTo(bx, by + 2/scale); ctx.lineTo(bx + tw, by + 2/scale);
+                        ctx.strokeStyle = "rgba(255, 255, 255, 0.9)"; ctx.lineWidth = 1/scale; ctx.stroke();
+                        ctx.textAlign = "left";
                     }}
                 }}
             }});
@@ -245,9 +224,7 @@ if os.path.exists(json_path):
 
 # --- 3. データテーブル ---
 st.divider()
-st.subheader("アンケート元データ")
+st.subheader("📊 アンケート元データ")
 if os.path.exists("survey_data.csv"):
     df = pd.read_csv("survey_data.csv")
     st.dataframe(df, use_container_width=True)
-
-
