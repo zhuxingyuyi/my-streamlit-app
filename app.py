@@ -10,7 +10,7 @@ st.set_page_config(page_title="ファイブエムOS 可視化プロト", layout=
 
 # --- タイトルと説明 ---
 st.title("ファイブエムOS 可視化プロト")
-st.write("アンケート結果を『共鳴のエコー』として可視化します。")
+st.write("アンケート結果を『シンクロニシティの波紋ー』として可視化します。")
 
 # --- サイドバー：データ管理 ---
 st.sidebar.header("データ管理")
@@ -54,7 +54,7 @@ if os.path.exists(bg_path):
 
 # --- 1. スタンダード・アニメーション ---
 if os.path.exists(json_path):
-    st.subheader("スタンダード・アニメーション")
+    st.subheader("スタンダード・マップ")
     html_standard = f"""
     <!DOCTYPE html><html><head><style>
         body {{ margin: 0; background-color: #020617; overflow: hidden; display: flex; justify-content: center; align-items: center; height: 600px; }}
@@ -112,7 +112,7 @@ if os.path.exists(json_path):
 
 # --- 2. インタラクティブ・分析 ---
 st.divider()
-st.subheader("インタラクティブ・分析")
+st.subheader("インタラクティブ・マップ")
 
 if os.path.exists(json_path):
     all_colors = sorted(list(set([n['color'] for n in anim_data['nodes']])))
@@ -249,4 +249,5 @@ st.subheader("アンケート元データ")
 if os.path.exists("survey_data.csv"):
     df = pd.read_csv("survey_data.csv")
     st.dataframe(df, use_container_width=True)
+
 
