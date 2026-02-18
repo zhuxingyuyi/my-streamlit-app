@@ -4,8 +4,8 @@ import pandas as pd
 import os
 import json
 import base64
-import sys  # 追加
-import importlib 
+import sys
+import importlib
 
 # ページ設定
 st.set_page_config(page_title="ファイブエムOS 可視化プロト", layout="wide")
@@ -18,22 +18,23 @@ st.sidebar.header("🛠 データ管理")
 
 uploaded_file = st.sidebar.file_uploader("新しいデータをアップロード (CSV)", type="csv")
 if uploaded_file is not None:
+    # ファイルを保存
     with open("survey_data.csv", "wb") as f:
         f.write(uploaded_file.getbuffer())
     st.sidebar.success("データが保存されました！")
 
-# 🔄 【最重要】キャッシュを完全に破壊して再生成するボタン
+# 🔄 【最重要】データを強制的に再解析して、アニメーションを「作り直す」処理
 if st.sidebar.button("🎥 アニメーションを生成/更新"):
     with st.spinner('最新データを解析して再生成中...'):
         try:
-            # メモリ上のキャッシュを削除
+            # メモリ上のモジュールキャッシュを削除して、確実に最新のCSVを読ませる
             if "gen_animation" in sys.modules:
                 del sys.modules["gen_animation"]
             
             import gen_animation
             importlib.reload(gen_animation)
             
-            # Streamlit自体のデータキャッシュもクリア
+            # Streamlit自体のキャッシュもクリア
             st.cache_data.clear()
             st.sidebar.success("最新データに更新完了！")
             st.rerun() 
@@ -46,27 +47,19 @@ bg_path = "universe_bg.png"
 animation_data_json = "{}"
 bg_b64 = ""
 
+# ファイルが存在する場合のみ読み込みを実行
 if os.path.exists(json_path):
     with open(json_path, "r", encoding='utf-8') as f:
         anim_data = json.load(f)
     
-    # カテゴリー名でのフィルター用マッピング作成
-    cat_to_color = {}
+    # CSVからメッセージ(Q6_Gift)を紐付け
     if os.path.exists("survey_data.csv"):
         df_csv = pd.read_csv("survey_data.csv")
-        # 名前とGiftの紐付け
         gift_map = pd.Series(df_csv.Q6_Gift.values, index=df_csv.Name).to_dict()
-        # Q4_Switch(カテゴリー)と色の対応を抽出
-        if 'Q4_Switch' in df_csv.columns:
-            # gen_animation内のロジックに合わせてノードにGiftを埋め込む
-            for node in anim_data['nodes']:
-                node['gift'] = str(gift_map.get(node['name'], ""))
-                # カテゴリー名を特定（名前を元にCSVから検索）
-                row = df_csv[df_csv['Name'] == node['name']]
-                if not row.empty:
-                    cat_name = str(row['Q4_Switch'].values[0])
-                    cat_to_color[cat_name] = node['color']
+        for node in anim_data['nodes']:
+            node['gift'] = str(gift_map.get(node['name'], ""))
     
+    # JSON文字列に変換（エラー回避のため、空でないことを確認）
     animation_data_json = json.dumps(anim_data)
 
 if os.path.exists(bg_path):
@@ -74,7 +67,7 @@ if os.path.exists(bg_path):
         bg_b64 = base64.b64encode(f.read()).decode('utf-8')
 
 # --- 1. スタンダード・アニメーション ---
-if os.path.exists(json_path):
+if os.path.exists(json_path) and animation_data_json != "{}":
     st.subheader("📺 スタンダード・アニメーション")
     html_standard = f"""
     <!DOCTYPE html><html><head><style>
@@ -115,8 +108,10 @@ if os.path.exists(json_path):
                     const a = Math.min(1.0, (elapsed - n.delay) / 120);
                     const x = 100+((n.x+500)/1000)*600, y = 600*(1-(n.y+500)/1000);
                     const p = ((elapsed - n.delay) % 640) / 640;
+                    // 波紋：太さ3.0、濃度高め
                     ctx.beginPath(); ctx.arc(x, y, (p*(n.score*4.5)/1000)*600, 0, Math.PI*2);
                     ctx.strokeStyle = n.color; ctx.lineWidth = 3; ctx.globalAlpha = Math.max(0, 1.2*(1-p)); ctx.stroke(); ctx.globalAlpha = 1;
+                    // グロウ：指定の透明度
                     ctx.beginPath(); ctx.arc(x, y, 24, 0, Math.PI*2); ctx.fillStyle = "rgba(255,255,255,"+(a*0.075)+")"; ctx.fill();
                     ctx.beginPath(); ctx.arc(x, y, 8, 0, Math.PI*2); ctx.fillStyle = "rgba(255,255,255,"+(a*0.2)+")"; ctx.fill();
                     ctx.beginPath(); ctx.arc(x, y, 3, 0, Math.PI*2); ctx.fillStyle = "rgba(255,255,255,"+(a*0.9)+")"; ctx.fill();
@@ -127,17 +122,17 @@ if os.path.exists(json_path):
         }}
     </script></body></html>
     """
-    components.html(html_standard, height=620, key="std_anim")
+    # TypeError回避のため、keyをシンプルな固定文字列に変更
+    components.html(html_standard, height=620, key="std_animation_comp")
 
 # --- 2. インタラクティブ・分析 ---
 st.divider()
 st.subheader("🔍 インタラクティブ・分析")
 
-if os.path.exists(json_path):
-    # 日本語のカテゴリー名でフィルターを作成
-    selected_cats = st.multiselect("表示するカテゴリーを選択", options=list(cat_to_color.keys()), default=[])
-    # 選ばれたカテゴリーに対応する色コードに変換
-    selected_colors = [cat_to_color[c] for c in selected_cats]
+if os.path.exists(json_path) and animation_data_json != "{}":
+    # 色コードでのフィルター（現状を維持）
+    all_colors = sorted(list(set([n['color'] for n in anim_data['nodes']])))
+    selected_colors = st.multiselect("表示する色のカテゴリーを選択", options=all_colors, default=[])
 
     html_interactive = f"""
     <!DOCTYPE html><html><head><style>
@@ -227,15 +222,27 @@ if os.path.exists(json_path):
                     ctx.beginPath(); ctx.arc(x, y, 3, 0, Math.PI*2); ctx.fillStyle = "rgba(255,255,255,"+(a*0.9)+")"; ctx.fill();
                     ctx.fillStyle = "rgba(255,255,255,"+(a*0.7)+")"; ctx.font = `bold ${{9/scale}}px sans-serif`; ctx.fillText(n.name, x+8/scale, y-5/scale);
 
+                    // --- ポップアップデザイン修正 (下線 + 斜め引き出し線) ---
                     if (selectedNode === n && n.gift) {{
-                        const txt = n.gift; ctx.font = `bold ${{10/scale}}px sans-serif`;
+                        const txt = n.gift; 
+                        ctx.font = `bold ${{10/scale}}px sans-serif`;
                         const tw = ctx.measureText(txt).width;
                         const bx = x - tw - 15/scale, by = y - 15/scale;
-                        ctx.beginPath(); ctx.moveTo(x-4/scale, y-4/scale); ctx.lineTo(bx+tw, by+2/scale);
-                        ctx.strokeStyle = "rgba(255,255,255,0.7)"; ctx.lineWidth = 1/scale; ctx.stroke();
-                        ctx.fillStyle = "white"; ctx.textAlign = "left"; ctx.fillText(txt, bx, by);
-                        ctx.beginPath(); ctx.moveTo(bx, by+2/scale); ctx.lineTo(bx+tw, by+2/scale);
-                        ctx.strokeStyle = "rgba(255,255,255,0.9)"; ctx.lineWidth = 1/scale; ctx.stroke();
+                        
+                        // 1. 引き出し線
+                        ctx.beginPath(); 
+                        ctx.moveTo(x - 4/scale, y - 4/scale); 
+                        ctx.lineTo(bx + tw, by + 2/scale);
+                        ctx.strokeStyle = "rgba(255, 255, 255, 0.7)"; 
+                        ctx.lineWidth = 1/scale; ctx.stroke();
+                        
+                        // 2. テキスト表示
+                        ctx.fillStyle = "white"; ctx.textAlign = "left"; 
+                        ctx.fillText(txt, bx, by);
+                        
+                        // 3. アンダーライン (下辺のみ)
+                        ctx.beginPath(); ctx.moveTo(bx, by + 2/scale); ctx.lineTo(bx + tw, by + 2/scale);
+                        ctx.strokeStyle = "rgba(255, 255, 255, 0.9)"; ctx.lineWidth = 1/scale; ctx.stroke();
                         ctx.textAlign = "left";
                     }}
                 }}
@@ -244,7 +251,8 @@ if os.path.exists(json_path):
         }}
     </script></body></html>
     """
-    components.html(html_interactive, height=720, key=f"int_anim_{hash(animation_data_json)}")
+    # TypeError回避のため、keyをシンプルなものに固定
+    components.html(html_interactive, height=720, key="int_animation_comp")
 
 # --- 3. データテーブル ---
 st.divider()
