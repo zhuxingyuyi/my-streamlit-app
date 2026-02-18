@@ -9,11 +9,11 @@ import base64
 st.set_page_config(page_title="ファイブエムOS 可視化プロト", layout="wide")
 
 # --- タイトルと説明 ---
-st.title("🌌 ファイブエムOS 可視化プロト")
+st.title("ファイブエムOS 可視化プロト")
 st.write("アンケート結果を『共鳴のエコー』として可視化します。")
 
 # --- サイドバー：データ管理 ---
-st.sidebar.header("🛠 データ管理")
+st.sidebar.header("データ管理")
 
 uploaded_file = st.sidebar.file_uploader("新しいデータをアップロード (CSV)", type="csv")
 if uploaded_file is not None:
@@ -21,7 +21,7 @@ if uploaded_file is not None:
         f.write(uploaded_file.getbuffer())
     st.sidebar.success("データが保存されました！")
 
-if st.sidebar.button("🎥 アニメーションを生成/更新"):
+if st.sidebar.button("アニメーションを生成/更新"):
     with st.spinner('データを解析中...'):
         try:
             import gen_animation
@@ -54,7 +54,7 @@ if os.path.exists(bg_path):
 
 # --- 1. スタンダード・アニメーション ---
 if os.path.exists(json_path):
-    st.subheader("📺 スタンダード・アニメーション")
+    st.subheader("スタンダード・アニメーション")
     html_standard = f"""
     <!DOCTYPE html><html><head><style>
         body {{ margin: 0; background-color: #020617; overflow: hidden; display: flex; justify-content: center; align-items: center; height: 600px; }}
@@ -112,7 +112,7 @@ if os.path.exists(json_path):
 
 # --- 2. インタラクティブ・分析 ---
 st.divider()
-st.subheader("🔍 インタラクティブ・分析")
+st.subheader("インタラクティブ・分析")
 
 if os.path.exists(json_path):
     all_colors = sorted(list(set([n['color'] for n in anim_data['nodes']])))
@@ -245,7 +245,8 @@ if os.path.exists(json_path):
 
 # --- 3. データテーブル ---
 st.divider()
-st.subheader("📊 アンケート元データ")
+st.subheader("アンケート元データ")
 if os.path.exists("survey_data.csv"):
     df = pd.read_csv("survey_data.csv")
     st.dataframe(df, use_container_width=True)
+
