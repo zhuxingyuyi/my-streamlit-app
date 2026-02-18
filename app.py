@@ -175,4 +175,77 @@ if os.path.exists(json_path):
 
         function loop() {{
             const elapsed = (Date.now() - startTime) / 50;
-            ctx.clearRect(0,0,800,600
+            ctx.clearRect(0,0,800,600);
+            ctx.save();
+            ctx.scale(scale, scale); ctx.translate(viewX, viewY);
+            ctx.drawImage(bgImage, 0, 0, 800, 600);
+            
+            data.lines.forEach(l => {{
+                if (elapsed >= l.delay) {{
+                    const n1 = data.nodes[l.source], n2 = data.nodes[l.target];
+                    if (activeColors.length === 0 || activeColors.includes(n1.color) || activeColors.includes(n2.color)) {{
+                        const a = Math.min(0.4, (elapsed - l.delay) / 320);
+                        ctx.beginPath(); ctx.moveTo(100+((n1.x+500)/1000)*600, 600*(1-(n1.y+500)/1000));
+                        ctx.lineTo(100+((n2.x+500)/1000)*600, 600*(1-(n2.y+500)/1000));
+                        ctx.strokeStyle = "rgba(255, 255, 255, "+a+")"; ctx.lineWidth = 1/scale; ctx.stroke();
+                    }}
+                }}
+            }});
+            data.nodes.forEach(n => {{
+                if (elapsed >= n.delay) {{
+                    const isSel = activeColors.length === 0 || activeColors.includes(n.color);
+                    const a = (isSel ? 1 : 0.1) * Math.min(1, (elapsed - n.delay)/120);
+                    const x = 100+((n.x+500)/1000)*600, y = 600*(1-(n.y+500)/1000);
+                    if (isSel) {{
+                        const p = ((elapsed - n.delay) % 640) / 640;
+                        ctx.beginPath(); ctx.arc(x, y, (p*(n.score*4.5)/1000)*600, 0, Math.PI*2);
+                        ctx.strokeStyle = n.color; ctx.lineWidth = 3/scale; ctx.globalAlpha = Math.max(0, 1.2*(1-p)); ctx.stroke(); ctx.globalAlpha = 1;
+                    }}
+                    ctx.beginPath(); ctx.arc(x, y, 24, 0, Math.PI*2); ctx.fillStyle = "rgba(255,255,255,"+(a*0.075)+")"; ctx.fill();
+                    ctx.beginPath(); ctx.arc(x, y, 8, 0, Math.PI*2); ctx.fillStyle = "rgba(255,255,255,"+(a*0.2)+")"; ctx.fill();
+                    ctx.beginPath(); ctx.arc(x, y, 3, 0, Math.PI*2); ctx.fillStyle = "rgba(255,255,255,"+(a*0.9)+")"; ctx.fill();
+                    ctx.fillStyle = "rgba(255,255,255,"+(a*0.7)+")"; ctx.font = `bold ${{9/scale}}px sans-serif`; ctx.fillText(n.name, x+8/scale, y-5/scale);
+
+                    if (selectedNode === n) {{
+                        const txt = n.gift; 
+                        ctx.font = `bold ${{10/scale}}px sans-serif`;
+                        const tw = ctx.measureText(txt).width;
+                        const bx = x - tw - 15/scale, by = y - 15/scale;
+                        
+                        // 1. 引き出し線（点からアンダーラインの右端へ）
+                        ctx.beginPath(); 
+                        ctx.moveTo(x - 4/scale, y - 4/scale); 
+                        ctx.lineTo(bx + tw, by + 2/scale);
+                        ctx.strokeStyle = "rgba(255, 255, 255, 0.7)"; 
+                        ctx.lineWidth = 1/scale; 
+                        ctx.stroke();
+                        
+                        // 2. テキスト表示（左上配置）
+                        ctx.fillStyle = "white";
+                        ctx.textAlign = "right"; 
+                        ctx.fillText(txt, bx + tw, by);
+                        
+                        // 3. アンダーライン（下辺のみ）
+                        ctx.beginPath();
+                        ctx.moveTo(bx, by + 2/scale);
+                        ctx.lineTo(bx + tw, by + 2/scale);
+                        ctx.strokeStyle = "rgba(255, 255, 255, 0.9)";
+                        ctx.lineWidth = 1/scale;
+                        ctx.stroke();
+                        
+                        ctx.textAlign = "left"; // リセット
+                    }}
+                }}
+            }});
+            ctx.restore(); requestAnimationFrame(loop);
+        }}
+    </script></body></html>
+    """
+    components.html(html_interactive, height=720)
+
+# --- 3. データテーブル ---
+st.divider()
+st.subheader("📊 アンケート元データ")
+if os.path.exists("survey_data.csv"):
+    df = pd.read_csv("survey_data.csv")
+    st.dataframe(df, use_container_width=True)
